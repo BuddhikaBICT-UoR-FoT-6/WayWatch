@@ -44,6 +44,8 @@ import java.util.Date
 // Theme + ViewModel
 import com.example.ceylonqueuebuspulse.ui.theme.CeylonQueueBusPulseTheme
 import com.example.ceylonqueuebuspulse.ui.TrafficViewModel
+import com.example.ceylonqueuebuspulse.ui.auth.AuthScreen
+import com.example.ceylonqueuebuspulse.ui.auth.AuthViewModel
 
 // Google Play Services Location APIs
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -58,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     // ViewModel scoped to the Activity lifecycle.
     private val viewModel: TrafficViewModel by viewModel()
+    private val authViewModel: AuthViewModel by viewModel()
 
     // Connectivity monitor for network state
     private val connectivityMonitor: ConnectivityMonitor by inject()
@@ -108,7 +111,8 @@ class MainActivity : ComponentActivity() {
         // Compose UI content
         setContent {
             CeylonQueueBusPulseTheme {
-                val state by viewModel.uiState.collectAsState()
+                val trafficState by viewModel.uiState.collectAsState()
+                val authState by authViewModel.uiState.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
 
                 // Observe network connectivity
@@ -116,10 +120,9 @@ class MainActivity : ComponentActivity() {
                     .collectAsState(initial = NetworkState.UNKNOWN)
 
                 // Show error as snackbar when errorMessage changes
-                LaunchedEffect(state.errorMessage) {
-                    state.errorMessage?.let {
+                LaunchedEffect(trafficState.errorMessage) {
+                    trafficState.errorMessage?.let {
                         snackbarHostState.showSnackbar(it)
-                        // Removed viewModel.clearError() to avoid unresolved reference in this scope
                     }
                 }
 
@@ -131,14 +134,24 @@ class MainActivity : ComponentActivity() {
                             duration = SnackbarDuration.Short
                         )
                     }
-                    // Removed auto-refresh on CONNECTED. "refresh()" triggers legacy HTTP sync and can be noisy.
-                    // Aggregation data refresh is triggered by the refresh button and WorkManager planner.
+                }
+
+                if (!authState.isLoggedIn) {
+                    AuthScreen(
+                        state = authState,
+                        onEmailChange = authViewModel::setEmail,
+                        onPasswordChange = authViewModel::setPassword,
+                        onToggleMode = authViewModel::toggleMode,
+                        onSubmit = authViewModel::submit,
+                        onMessageShown = authViewModel::consumeMessages
+                    )
+                    return@CeylonQueueBusPulseTheme
                 }
 
                 // Convert epoch millis -> human-readable local date/time.
                 // Uses java.text.DateFormat for API 24+ compatibility.
-                val formattedLastUpdate = remember(state.lastUpdatedMs) {
-                    state.lastUpdatedMs?.let { ms ->
+                val formattedLastUpdate = remember(trafficState.lastUpdatedMs) {
+                    trafficState.lastUpdatedMs?.let { ms ->
                         DateFormat.getDateTimeInstance(
                             DateFormat.MEDIUM,
                             DateFormat.SHORT
@@ -152,6 +165,10 @@ class MainActivity : ComponentActivity() {
                         TopAppBar(
                             title = { Text("Bus Traffic Updates") },
                             actions = {
+                                TextButton(onClick = { authViewModel.logout() }) {
+                                    Text("Logout", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+
                                 // Offline indicator
                                 if (networkState == NetworkState.DISCONNECTED) {
                                     Badge(
@@ -187,7 +204,7 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(4.dp))
 
                         // Show sync/refresh status and last updated timestamp when available
-                        if (state.isSyncing) {
+                        if (trafficState.isSyncing) {
                             Text("Syncing…", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             formattedLastUpdate?.let { pretty ->
@@ -207,7 +224,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             routes.forEach { routeId ->
                                 FilterChip(
-                                    selected = state.selectedRouteId == routeId,
+                                    selected = trafficState.selectedRouteId == routeId,
                                     onClick = { viewModel.selectRoute(routeId) },
                                     label = { Text(routeId) }
                                 )
@@ -217,8 +234,8 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(16.dp))
 
                         // Current Traffic Status Card
-                        if (state.aggregatedData.isNotEmpty()) {
-                            val latest = state.aggregatedData.first()
+                        if (trafficState.aggregatedData.isNotEmpty()) {
+                            val latest = trafficState.aggregatedData.first()
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
@@ -231,7 +248,7 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
-                                        text = "Current Traffic: Route ${state.selectedRouteId}",
+                                        text = "Current Traffic: Route ${trafficState.selectedRouteId}",
                                         style = MaterialTheme.typography.titleLarge
                                     )
                                     Spacer(Modifier.height(8.dp))
@@ -265,7 +282,7 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             Text(
-                                text = "No aggregated data yet for Route ${state.selectedRouteId}",
+                                text = "No aggregated data yet for Route ${trafficState.selectedRouteId}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.Gray
                             )
@@ -277,12 +294,12 @@ class MainActivity : ComponentActivity() {
                         Text("Recent History:", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(8.dp))
 
-                        if (state.aggregatedData.size > 1) {
+                        if (trafficState.aggregatedData.size > 1) {
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(state.aggregatedData.size) { index ->
-                                    val agg = state.aggregatedData[index]
+                                items(trafficState.aggregatedData.size) { index ->
+                                    val agg = trafficState.aggregatedData[index]
                                     Card(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -316,7 +333,7 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(16.dp))
 
                         // Sample action to submit a fixed location (Colombo)
-                        Button(onClick = { viewModel.submitUserLocation(6.9271, 79.8612, state.selectedRouteId) }) {
+                        Button(onClick = { viewModel.submitUserLocation(6.9271, 79.8612, trafficState.selectedRouteId) }) {
                             Text("Submit Sample Traffic Report")
                         }
                     }

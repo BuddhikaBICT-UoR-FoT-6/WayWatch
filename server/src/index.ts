@@ -2,7 +2,12 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 import { z } from 'zod';
+import { requireAuth, signAccessToken, type AuthedRequest } from './auth';
+import { signRefreshToken, verifyRefreshToken } from './auth';
+import { User, type UserRole } from './models/User';
+import { requireRole } from './roles';
 
 dotenv.config();
 
@@ -74,6 +79,30 @@ const aggregateWindowSchema = z.object({
   segmentId: z.string().default('_all'),
 });
 
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
+const createUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  role: z.enum(['superadmin', 'admin', 'user']).default('user'),
+});
+
+const updateUserRoleSchema = z.object({
+  role: z.enum(['superadmin', 'admin', 'user']),
+});
+
 function computeStats(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const len = sorted.length;
@@ -87,8 +116,184 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// --- Auth routes ---
+app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = registerSchema.parse(req.body);
+
+    const existing = await User.findOne({ email: email.toLowerCase() }).lean();
+    if (existing) {
+      return res.status(409).json({ ok: false, error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const created = await User.create({ email: email.toLowerCase(), passwordHash, role: 'user' as UserRole });
+
+    const accessToken = signAccessToken({ id: String(created._id), email: created.email, role: String(created.get('role')) as UserRole });
+    const { token: refreshToken } = signRefreshToken(String(created._id));
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+    await User.updateOne({ _id: created._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
+
+    return res.status(201).json({
+      ok: true,
+      data: {
+        accessToken,
+        refreshToken,
+        user: { id: String(created._id), email: created.email, role: String(created.get('role')) },
+      },
+    });
+  } catch (e: any) {
+    console.error('/auth/register error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
+app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = loginSchema.parse(req.body);
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Invalid email or password' });
+    }
+
+    const ok = await bcrypt.compare(password, String(user.get('passwordHash')));
+    if (!ok) {
+      return res.status(401).json({ ok: false, error: 'Invalid email or password' });
+    }
+
+    const accessToken = signAccessToken({
+      id: String(user._id),
+      email: String(user.get('email')),
+      role: String(user.get('role') || 'user') as UserRole,
+    });
+    const { token: refreshToken } = signRefreshToken(String(user._id));
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+    await User.updateOne({ _id: user._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
+
+    return res.json({
+      ok: true,
+      data: {
+        accessToken,
+        refreshToken,
+        user: { id: String(user._id), email: String(user.get('email')), role: String(user.get('role') || 'user') },
+      },
+    });
+  } catch (e: any) {
+    console.error('/auth/login error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
+app.post('/api/v1/auth/refresh', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = refreshSchema.parse(req.body);
+    const decoded = verifyRefreshToken(refreshToken);
+
+    const user = await User.findById(decoded.sub);
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Invalid refresh token' });
+    }
+
+    const storedHash = String(user.get('refreshTokenHash') || '');
+    if (!storedHash) {
+      return res.status(401).json({ ok: false, error: 'Refresh token revoked' });
+    }
+
+    const ok = await bcrypt.compare(refreshToken, storedHash);
+    if (!ok) {
+      return res.status(401).json({ ok: false, error: 'Invalid refresh token' });
+    }
+
+    const accessToken = signAccessToken({
+      id: String(user._id),
+      email: String(user.get('email')),
+      role: String(user.get('role') || 'user') as UserRole,
+    });
+
+    const { token: newRefreshToken } = signRefreshToken(String(user._id));
+    const refreshTokenHash = await bcrypt.hash(newRefreshToken, 12);
+    await User.updateOne({ _id: user._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
+
+    return res.json({ ok: true, data: { accessToken, refreshToken: newRefreshToken } });
+  } catch (e: any) {
+    console.error('/auth/refresh error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
+app.post('/api/v1/auth/logout', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    await User.updateOne({ _id: req.user!.sub }, { $unset: { refreshTokenHash: 1, refreshTokenIssuedAt: 1 } });
+    return res.json({ ok: true });
+  } catch (e: any) {
+    console.error('/auth/logout error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
+// --- Admin/Superadmin user management ---
+// Superadmin: list all users
+app.get('/api/v1/admin/users', requireAuth, requireRole(['superadmin']), async (_req: AuthedRequest, res: Response) => {
+  const users = await User.find({}).select('email role createdAt').lean();
+  return res.json({ ok: true, data: users });
+});
+
+// Admin+Superadmin: create regular users; Superadmin can create admins/superadmins
+app.post('/api/v1/admin/users', requireAuth, requireRole(['admin', 'superadmin']), async (req: AuthedRequest, res: Response) => {
+  try {
+    const { email, password, role } = createUserSchema.parse(req.body);
+
+    const requestedRole = role as UserRole;
+    const callerRole = req.user!.role;
+
+    if (callerRole !== 'superadmin' && requestedRole !== 'user') {
+      return res.status(403).json({ ok: false, error: 'Only superadmin can create admin/superadmin accounts' });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const existing = await User.findOne({ email: normalizedEmail }).lean();
+    if (existing) {
+      return res.status(409).json({ ok: false, error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const created = await User.create({ email: normalizedEmail, passwordHash, role: requestedRole });
+
+    return res.status(201).json({
+      ok: true,
+      data: { id: String(created._id), email: String(created.get('email')), role: String(created.get('role')) },
+    });
+  } catch (e: any) {
+    console.error('/admin/users POST error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
+// Superadmin only: update a user's role
+app.patch('/api/v1/admin/users/:id/role', requireAuth, requireRole(['superadmin']), async (req: AuthedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { role } = updateUserRoleSchema.parse(req.body);
+    const updated = await User.findByIdAndUpdate(
+      id,
+      { $set: { role } },
+      { new: true }
+    ).select('email role createdAt');
+
+    if (!updated) {
+      return res.status(404).json({ ok: false, error: 'User not found' });
+    }
+
+    return res.json({ ok: true, data: { id: String(updated._id), email: String(updated.get('email')), role: String(updated.get('role')) } });
+  } catch (e: any) {
+    console.error('/admin/users/:id/role PATCH error', e);
+    return res.status(400).json({ ok: false, error: e.message ?? 'Bad Request' });
+  }
+});
+
 // Routes
-app.post('/api/v1/samples', async (req: Request, res: Response) => {
+app.post('/api/v1/samples', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const parsed = submitSampleSchema.parse(req.body);
     await Sample.create(parsed);
@@ -99,7 +304,7 @@ app.post('/api/v1/samples', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/v1/aggregate', async (req: Request, res: Response) => {
+app.post('/api/v1/aggregate', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const { routeId, windowStartMs, segmentId } = aggregateWindowSchema.parse(req.body);
 
@@ -134,7 +339,7 @@ app.post('/api/v1/aggregate', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/v1/aggregates', async (req: Request, res: Response) => {
+app.get('/api/v1/aggregates', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const routeId = String(req.query.routeId || '').trim();
     const windowStartMs = Number(req.query.windowStartMs || 0);
@@ -152,4 +357,3 @@ app.get('/api/v1/aggregates', async (req: Request, res: Response) => {
 
 const PORT = Number(process.env.PORT || 3000);
 app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));
-

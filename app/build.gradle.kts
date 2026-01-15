@@ -117,6 +117,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
 
+    // OkHttp logging (useful during auth bring-up)
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
     // Unit testing
     testImplementation(libs.junit)
 

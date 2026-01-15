@@ -10,6 +10,11 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
+import com.example.ceylonqueuebuspulse.data.auth.AuthInterceptor
+import com.example.ceylonqueuebuspulse.data.auth.AuthRepository
+import com.example.ceylonqueuebuspulse.data.auth.TokenStore
+import com.example.ceylonqueuebuspulse.data.auth.TokenRefreshAuthenticator
+import okhttp3.logging.HttpLoggingInterceptor
 
 // Simple Retrofit provider. Replace BASE_URL with your backend URL.
 object RetrofitProvider {
@@ -20,15 +25,29 @@ object RetrofitProvider {
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .build()
+    fun mongoRetrofit(tokenStore: TokenStore? = null, authRepository: AuthRepository? = null): Retrofit {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
 
-    fun mongoRetrofit(): Retrofit = Retrofit.Builder()
-        .baseUrl(mongoApiBaseUrl)
-        .addConverterFactory(MoshiConverterFactory.create(moshi))
-        .client(client)
-        .build()
+        val clientBuilder = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(logging)
+
+        if (tokenStore != null) {
+            clientBuilder.addInterceptor(AuthInterceptor(tokenStore))
+        }
+
+        if (tokenStore != null && authRepository != null) {
+            clientBuilder.authenticator(TokenRefreshAuthenticator(authRepository, tokenStore))
+        }
+
+        return Retrofit.Builder()
+            .baseUrl(mongoApiBaseUrl)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .client(clientBuilder.build())
+            .build()
+    }
 }
