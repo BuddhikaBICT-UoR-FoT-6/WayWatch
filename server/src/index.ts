@@ -4,16 +4,28 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { requireAuth, signAccessToken, type AuthedRequest } from './auth';
-import { signRefreshToken, verifyRefreshToken } from './auth';
+import { requireAuth, signAccessToken, type AuthedRequest, signRefreshToken, verifyRefreshToken, verifyTokenMiddleware, rotateRefreshToken, revokeRefreshTokenByJti, revokeAllTokensForUser } from './auth';
 import { User, type UserRole } from './models/User';
+import { RefreshTokenModel } from './models/RefreshToken';
 import { requireRole } from './roles';
+import { loginLimiter, registerLimiter, trafficSamplesLimiter, getRecentRateLimitBlocks, listBlockedKeys, removeBlockedKey } from './middleware/rateLimiter';
+import { duplicateSubmissionProtection } from './middleware/duplicateDetection';
+
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Respect proxy headers (X-Forwarded-For) when behind a proxy/load-balancer.
+// Set to true for generic setups; in production you may prefer a restricted list
+// of trusted proxies or IP ranges for tighter security.
+app.set('trust proxy', true);
+
+if(!process.env.REDIS_URL){
+  console.warn('WARNING: REDIS_URL is NOT configured — rate limiter will use in-memory fallback and duplicate detection will not work. Configure REDIS_URL for production.');
+}
 
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
@@ -117,7 +129,7 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // --- Auth routes ---
-app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
+app.post('/api/v1/auth/register', registerLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = registerSchema.parse(req.body);
 
@@ -129,10 +141,12 @@ app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const created = await User.create({ email: email.toLowerCase(), passwordHash, role: 'user' as UserRole });
 
+    // Enforce single-active-refresh-token: revoke any previous tokens linked to this user (precaution)
+    await revokeAllTokensForUser(String(created._id));
+
     const accessToken = signAccessToken({ id: String(created._id), email: created.email, role: String(created.get('role')) as UserRole });
-    const { token: refreshToken } = signRefreshToken(String(created._id));
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
-    await User.updateOne({ _id: created._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
+    const { token: refreshToken } = await signRefreshToken(String(created._id));
+    // don't store per-user hashed refreshToken - using RefreshTokenModel as source of truth
 
     return res.status(201).json({
       ok: true,
@@ -148,7 +162,7 @@ app.post('/api/v1/auth/register', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
+app.post('/api/v1/auth/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
@@ -162,14 +176,16 @@ app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ ok: false, error: 'Invalid email or password' });
     }
 
+    // Revoke existing refresh tokens for this user to enforce single-active-token policy
+    await revokeAllTokensForUser(String(user._id));
+
     const accessToken = signAccessToken({
       id: String(user._id),
       email: String(user.get('email')),
       role: String(user.get('role') || 'user') as UserRole,
     });
-    const { token: refreshToken } = signRefreshToken(String(user._id));
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
-    await User.updateOne({ _id: user._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
+    const { token: refreshToken } = await signRefreshToken(String(user._id));
+    // don't store per-user hashed refreshToken - using RefreshTokenModel as source of truth
 
     return res.json({
       ok: true,
@@ -188,32 +204,21 @@ app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
 app.post('/api/v1/auth/refresh', async (req: Request, res: Response) => {
   try {
     const { refreshToken } = refreshSchema.parse(req.body);
-    const decoded = verifyRefreshToken(refreshToken);
+    const decoded = await verifyRefreshToken(refreshToken);
 
     const user = await User.findById(decoded.sub);
     if (!user) {
       return res.status(401).json({ ok: false, error: 'Invalid refresh token' });
     }
 
-    const storedHash = String(user.get('refreshTokenHash') || '');
-    if (!storedHash) {
-      return res.status(401).json({ ok: false, error: 'Refresh token revoked' });
-    }
-
-    const ok = await bcrypt.compare(refreshToken, storedHash);
-    if (!ok) {
-      return res.status(401).json({ ok: false, error: 'Invalid refresh token' });
-    }
+    // rotate: will verify+revoke old and issue a new refresh token
+    const newRefreshToken = await rotateRefreshToken(refreshToken, { ip: req.ip, ua: req.headers['user-agent'] });
 
     const accessToken = signAccessToken({
       id: String(user._id),
       email: String(user.get('email')),
       role: String(user.get('role') || 'user') as UserRole,
     });
-
-    const { token: newRefreshToken } = signRefreshToken(String(user._id));
-    const refreshTokenHash = await bcrypt.hash(newRefreshToken, 12);
-    await User.updateOne({ _id: user._id }, { $set: { refreshTokenHash, refreshTokenIssuedAt: new Date() } });
 
     return res.json({ ok: true, data: { accessToken, refreshToken: newRefreshToken } });
   } catch (e: any) {
@@ -224,7 +229,19 @@ app.post('/api/v1/auth/refresh', async (req: Request, res: Response) => {
 
 app.post('/api/v1/auth/logout', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
-    await User.updateOne({ _id: req.user!.sub }, { $unset: { refreshTokenHash: 1, refreshTokenIssuedAt: 1 } });
+    const { refreshToken } = req.body || {};
+    if (refreshToken) {
+      // try to revoke by jti from token
+      try {
+        const decoded = await verifyRefreshToken(refreshToken);
+        await revokeRefreshTokenByJti(decoded.jti);
+      } catch (e) {
+        // ignore invalid token
+      }
+    } else {
+      // If no token supplied, revoke all tokens for the current user (optional behavior)
+      await RefreshTokenModel.updateMany({ userId: req.user!.sub }, { $set: { revoked: true } });
+    }
     return res.json({ ok: true });
   } catch (e: any) {
     console.error('/auth/logout error', e);
@@ -292,6 +309,42 @@ app.patch('/api/v1/admin/users/:id/role', requireAuth, requireRole(['superadmin'
   }
 });
 
+// Admin endpoint: recent rate-limit blocks (superadmin only)
+app.get('/api/v1/admin/rate-limits', requireAuth, requireRole(['superadmin']), async (_req: AuthedRequest, res: Response) => {
+  try {
+    const items = await getRecentRateLimitBlocks(200);
+    return res.json({ ok: true, data: items });
+  } catch (e: any) {
+    console.error('/admin/rate-limits error', e);
+    return res.status(500).json({ ok: false, error: 'Failed to fetch rate-limit blocks' });
+  }
+});
+
+// Admin endpoint: list temporary blocklist entries (superadmin only)
+app.get('/api/v1/admin/blocks', requireAuth, requireRole(['superadmin']), async (_req: AuthedRequest, res: Response) => {
+  try {
+    const items = await listBlockedKeys(200);
+    return res.json({ ok: true, data: items });
+  } catch (e: any) {
+    console.error('/admin/blocks error', e);
+    return res.status(500).json({ ok: false, error: 'Failed to list blocked keys' });
+  }
+});
+
+// Admin endpoint: remove/unblock a key (superadmin only)
+app.delete('/api/v1/admin/blocks/:key', requireAuth, requireRole(['superadmin']), async (req: AuthedRequest, res: Response) => {
+  try {
+    const key = String(req.params.key || '').trim();
+    if (!key) return res.status(400).json({ ok: false, error: 'Missing key' });
+    const ok = await removeBlockedKey(key);
+    if (!ok) return res.status(404).json({ ok: false, error: 'Key not found or removal failed' });
+    return res.json({ ok: true });
+  } catch (e: any) {
+    console.error('/admin/blocks DELETE error', e);
+    return res.status(500).json({ ok: false, error: 'Failed to remove block' });
+  }
+});
+
 // Routes
 app.post('/api/v1/samples', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
@@ -355,5 +408,29 @@ app.get('/api/v1/aggregates', requireAuth, async (req: AuthedRequest, res: Respo
   }
 });
 
-const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));
+
+// Export app for testing and reuse
+export { app };
+
+// Only start listening when run directly
+if (require.main === module) {
+  const PORT = Number(process.env.PORT || 3000);
+  app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));
+}
+
+
+/**
+ * Protect traffic samples submissions:
+ * - verify token (must be authenticated)
+ * - per-user rate limit
+ * - duplicate detection
+ */
+app.post(
+  '/traffic/samples',
+  verifyTokenMiddleware,         // must set req.user
+  trafficSamplesLimiter,         // per-user + per-ip limits
+  duplicateSubmissionProtection(60 * 5), // 5min duplicate TTL
+  async (req, res) => {
+    // handle sample submission
+  },
+);

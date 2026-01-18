@@ -1,12 +1,26 @@
 package com.example.ceylonqueuebuspulse.data.auth
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
 class TokenStore(private val context: Context) {
-    private val prefs = context.getSharedPreferences("auth", Context.MODE_PRIVATE)
+    // Create or retrieve a MasterKey for encryption
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        "auth_prefs",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
     private val keyAccessToken = "access_token"
     private val keyRefreshToken = "refresh_token"
 

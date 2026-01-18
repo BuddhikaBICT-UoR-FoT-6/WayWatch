@@ -1,11 +1,28 @@
-import { Schema, model, Types } from "mongoose";
+// TypeScript
+import mongoose from 'mongoose';
 
-// RefreshToken schema for storing refresh tokens securely in MongoDB
-// Each token is linked to a user and expires automatically after 30 days
-const RefreshTokenSchema = new Schema({
-    userId: { type: Types.ObjectId, ref: "users", required: true }, // Reference to user
-    token: { type: String, required: true, unique: true }, // The refresh token string
-    createdAt: { type: Date, default: Date.now, expires: "30d" }, // Auto-remove after 30 days
-});
+// Store refresh tokens with jti and expiration; expiresAt is a Date so we can add a TTL index
+const RefreshTokenSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    jti: { type: String, required: true, index: true, unique: true },
+    issuedAt: { type: Date, required: true },
+    expiresAt: { type: Date, required: true, index: true },
+    revoked: { type: Boolean, default: false, index: true },
+    meta: { type: Object }, // optional metadata (ip, userAgent)
+  },
+  { timestamps: false, versionKey: false }
+);
 
-export const RefreshToken = model("RefreshToken", RefreshTokenSchema);
+// TTL index: expire documents when expiresAt <= now
+RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+export const RefreshTokenModel = mongoose.model('RefreshToken', RefreshTokenSchema);
+export type RefreshTokenDoc = mongoose.Document & {
+  userId: string;
+  jti: string;
+  issuedAt: Date;
+  expiresAt: Date;
+  revoked: boolean;
+  meta?: Record<string, any>;
+};
