@@ -1,8 +1,11 @@
 package com.example.ceylonqueuebuspulse.work
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -97,10 +100,21 @@ class SevereTrafficAlertWorker(
             String.format(Locale.US, "%.1f", severityAvg)
         )
 
+        val deepLink = Uri.parse("ceylonqueue://route?routeId=$routeId")
+        val contentIntent = PendingIntent.getActivity(
+            applicationContext,
+            (routeId.hashCode() xor windowStartMs.hashCode()),
+            Intent(Intent.ACTION_VIEW, deepLink).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notif = NotificationCompat.Builder(applicationContext, NotificationChannels.CHANNEL_SEVERE_TRAFFIC)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(text)
+            .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
 

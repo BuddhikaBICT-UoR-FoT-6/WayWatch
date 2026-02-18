@@ -11,6 +11,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.ceylonqueuebuspulse.settings.SettingsRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
@@ -20,7 +23,7 @@ object SyncScheduler {
 
     /**
      * Schedule periodic background sync and aggregation.
-     * Note: WorkManager enforces a minimum periodic interval of 15 minutes.
+     * Interval is user-configurable (Settings.refreshIntervalMinutes) but WorkManager enforces min 15 minutes.
      */
     fun schedule(context: Context) {
         // Only run when the device has an active network connection.
@@ -28,8 +31,10 @@ object SyncScheduler {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        val intervalMinutes = readIntervalMinutes(context)
+
         // Mongo-only: schedule the planner which enqueues one-time aggregation+sync workers.
-        val plannerRequest = PeriodicWorkRequestBuilder<AggregationPlannerWorker>(15, TimeUnit.MINUTES)
+        val plannerRequest = PeriodicWorkRequestBuilder<AggregationPlannerWorker>(intervalMinutes.toLong(), TimeUnit.MINUTES)
             .setConstraints(constraints)
             .setBackoffCriteria(
                 androidx.work.BackoffPolicy.LINEAR,
@@ -45,7 +50,7 @@ object SyncScheduler {
             )
 
         // Severe traffic alerts (watched routes)
-        val alertRequest = PeriodicWorkRequestBuilder<SevereTrafficAlertWorker>(15, TimeUnit.MINUTES)
+        val alertRequest = PeriodicWorkRequestBuilder<SevereTrafficAlertWorker>(intervalMinutes.toLong(), TimeUnit.MINUTES)
             .setConstraints(constraints)
             .setBackoffCriteria(
                 androidx.work.BackoffPolicy.LINEAR,
@@ -59,6 +64,18 @@ object SyncScheduler {
                 ExistingPeriodicWorkPolicy.UPDATE,
                 alertRequest
             )
+    }
+
+    private fun readIntervalMinutes(context: Context): Int {
+        return try {
+            runBlocking {
+                val repo = SettingsRepository(context.applicationContext)
+                val settings = repo.settings.first()
+                settings.refreshIntervalMinutes.coerceAtLeast(15)
+            }
+        } catch (_: Throwable) {
+            15
+        }
     }
 
     /**
