@@ -32,4 +32,16 @@
     <string name="detail_window">Window: %1$s</string>
     <string name="detail_avg_severity">Average severity: %1$.1f / 5.0</string>
     <string name="detail_samples">Samples: %1$d</string>
+
+    <string name="label_filters">Filters:</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_highest">Highest</string>
+    <string name="label_min_severity">Min severity: %1$d</string>
+
+    <string name="label_window">Window: %1$s</string>
+    <string name="label_samples">%1$d samples</string>
+
+    <string name="cd_open_detail">Open detail</string>
+    <string name="msg_offline">You\'re offline. Data will sync when connection is restored.</string>
 </resources>

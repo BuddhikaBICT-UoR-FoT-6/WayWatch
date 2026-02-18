@@ -131,6 +131,8 @@ class MainActivity : ComponentActivity() {
                 val networkState by connectivityMonitor.observeConnectivity()
                     .collectAsState(initial = NetworkState.UNKNOWN)
 
+                val offlineMessage = stringResource(id = R.string.msg_offline)
+
                 // Show error as snackbar when errorMessage changes
                 LaunchedEffect(trafficState.errorMessage) {
                     trafficState.errorMessage?.let {
@@ -142,7 +144,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(networkState) {
                     if (networkState == NetworkState.DISCONNECTED) {
                         snackbarHostState.showSnackbar(
-                            message = "You're offline. Data will sync when connection is restored.",
+                            message = offlineMessage,
                             duration = SnackbarDuration.Short
                         )
                     }
@@ -298,27 +300,30 @@ class MainActivity : ComponentActivity() {
                             Spacer(Modifier.height(16.dp))
 
                             // Sorting + filtering controls
-                            Text("Filters:", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(id = R.string.label_filters), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(
                                     selected = sortMode == SortMode.NEWEST,
                                     onClick = { sortMode = SortMode.NEWEST },
-                                    label = { Text("Newest") }
+                                    label = { Text(stringResource(id = R.string.sort_newest)) }
                                 )
                                 FilterChip(
                                     selected = sortMode == SortMode.OLDEST,
                                     onClick = { sortMode = SortMode.OLDEST },
-                                    label = { Text("Oldest") }
+                                    label = { Text(stringResource(id = R.string.sort_oldest)) }
                                 )
                                 FilterChip(
                                     selected = sortMode == SortMode.HIGHEST_SEVERITY,
                                     onClick = { sortMode = SortMode.HIGHEST_SEVERITY },
-                                    label = { Text("Highest") }
+                                    label = { Text(stringResource(id = R.string.sort_highest)) }
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
-                            Text("Min severity: ${minSeverity.toInt()}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                stringResource(id = R.string.label_min_severity, minSeverity.toInt()),
+                                style = MaterialTheme.typography.bodySmall
+                            )
                             Slider(
                                 value = minSeverity,
                                 onValueChange = { minSeverity = it },
@@ -425,7 +430,10 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
                                                 val timeStr = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(agg.windowStartMs))
-                                                Text(text = "Window: $timeStr", style = MaterialTheme.typography.bodyMedium)
+                                                Text(
+                                                    text = stringResource(id = R.string.label_window, timeStr),
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
                                                 Text(
                                                     text = "Avg: %.1f | P50: %.1f | P90: %.1f".format(
                                                         agg.severityAvg,
@@ -440,13 +448,13 @@ class MainActivity : ComponentActivity() {
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(
-                                                        text = "${agg.sampleCount} samples",
+                                                        text = stringResource(id = R.string.label_samples, agg.sampleCount),
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = Color.Gray
                                                     )
                                                     Icon(
                                                         imageVector = Icons.Filled.Info,
-                                                        contentDescription = "Open detail",
+                                                        contentDescription = stringResource(id = R.string.cd_open_detail),
                                                         tint = MaterialTheme.colorScheme.primary
                                                     )
                                                 }
