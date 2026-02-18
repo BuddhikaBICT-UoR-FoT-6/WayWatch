@@ -25,7 +25,11 @@ class MainActivity : ComponentActivity(){
             val status by locVm.status.collectAsState(initial = null)
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)){
                 Button(onClick = {
-                    startActivity(Intent(this@MainActivity, MapComposeActivity::class.java))
+                    startActivity(
+                        Intent(this@MainActivity, MapComposeActivity::class.java).apply {
+                            putExtra(MapComposeActivity.EXTRA_ROUTE_ID, "138")
+                        }
+                    )
                 }, modifier = Modifier.fillMaxWidth()) {
                     Text("Open Map (MapComposeActivity)")
                 }
