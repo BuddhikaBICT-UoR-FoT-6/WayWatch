@@ -49,6 +49,9 @@
             </intent-filter>
         </activity>
 
+        <!-- Compose Traffic Detail screen -->
+        <activity android:name=".ui.TrafficDetailActivity" android:exported="false" />
+
         <!-- Map activity for TomTom map interactions (legacy) -->
         <activity android:name=".traffic.MapActivity" android:exported="false" />
 

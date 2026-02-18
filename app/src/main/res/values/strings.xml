@@ -1,3 +1,35 @@
 <resources>
     <string name="app_name">Ceylon Queue + Bus Pulse</string>
+
+    <string name="title_bus_traffic_updates">Bus Traffic Updates</string>
+    <string name="action_logout">Logout</string>
+    <string name="status_offline">Offline</string>
+    <string name="action_refresh">Refresh</string>
+
+    <string name="status_working">Working…</string>
+    <string name="status_syncing">Syncing…</string>
+    <string name="label_last_updated">Last updated: %1$s</string>
+
+    <string name="label_select_route">Select Route:</string>
+    <string name="label_current_traffic">Current Traffic: Route %1$s</string>
+    <string name="label_severity">Severity: %1$.1f / 5.0</string>
+    <string name="label_based_on_reports">Based on %1$d reports</string>
+    <string name="label_updated_minutes_ago">Updated %1$d min ago</string>
+
+    <string name="empty_no_aggregates">No aggregated data yet for Route %1$s</string>
+    <string name="hint_tap_refresh">Tap Refresh to fetch the latest aggregates.</string>
+
+    <string name="label_recent_history">Recent History:</string>
+    <string name="empty_no_history">No history yet.</string>
+
+    <string name="action_submit_sample">Submit Sample Traffic Report</string>
+
+    <string name="action_retry">Retry</string>
+    <string name="action_dismiss">Dismiss</string>
+
+    <string name="detail_title">Traffic detail</string>
+    <string name="detail_route">Route: %1$s</string>
+    <string name="detail_window">Window: %1$s</string>
+    <string name="detail_avg_severity">Average severity: %1$.1f / 5.0</string>
+    <string name="detail_samples">Samples: %1$d</string>
 </resources>

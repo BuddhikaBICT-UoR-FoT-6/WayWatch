@@ -165,4 +165,7 @@ dependencies {
         // Keep the stubs in the source tree (com.tomtom.*) so builds succeed without the SDK.
     }
 
+    // Pull-to-refresh for Compose
+    implementation("androidx.compose.material:material-pull-refresh:1.1.0")
+
 }

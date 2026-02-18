@@ -30,6 +30,14 @@ dependencyResolutionManagement {
         // TomTom SDK public repository (optional credentials supported)
         maven {
             url = uri("https://tomtom.jfrog.io/artifactory/tt-public-releases")
+
+            // IMPORTANT: keep this repo scoped to TomTom artifacts only.
+            // Otherwise Gradle may try to resolve standard AndroidX artifacts from JFrog first and fail with 401.
+            content {
+                includeGroupByRegex("com\\.tomtom(\\..*)?")
+                includeGroup("com.tomtom.online")
+            }
+
             // Optional credentials: set in user Gradle properties (e.g. C:\Users\<you>\.gradle\gradle.properties)
             // Properties: TOMTOM_REPO_USER and TOMTOM_REPO_PASSWORD
             val tomtomUser: String? = providers.gradleProperty("TOMTOM_REPO_USER").orNull
