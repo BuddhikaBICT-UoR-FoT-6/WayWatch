@@ -12,7 +12,8 @@ data class RoutePointsResponse(
 
 data class RoutePoint(
     val lat: Double,
-    val lon: Double
+    val lon: Double,
+    val severity: Double? = null
 )
 
 interface DebugApi {

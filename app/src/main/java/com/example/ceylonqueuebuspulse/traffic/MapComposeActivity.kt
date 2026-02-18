@@ -262,8 +262,7 @@ fun MapComposeScreen(
             obj.put("lat", p.lat)
             obj.put("lon", p.lon)
             obj.put("label", "Route point")
-            // Placeholder: until backend returns per-point severity, show neutral severity.
-            obj.put("severity", 2.0)
+            obj.put("severity", p.severity ?: 2.0)
             arr.put(obj)
         }
 

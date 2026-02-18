@@ -1,6 +1,6 @@
 import * as express from 'express';
 import { fetchPointFlow, fetchTomTomForBbox, ProviderPointData } from '../integrations/tomtom';
-import { getAllRoutesSamplePoints } from '../models/routes';
+import { getRouteSamplePointsWithSeverity } from '../models/routesPoints';
 const router = express.Router();
 
 // GET /api/v1/traffic?lat=&lon=
@@ -43,13 +43,13 @@ router.get('/api/v1/routes/:routeId/points', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'maxPoints must be a positive number' });
     }
 
-    const all = await getAllRoutesSamplePoints(
+    const points = await getRouteSamplePointsWithSeverity(
+      routeId,
       Number.isFinite(windowStartMs as any) ? (windowStartMs as any as number) : undefined,
-      Math.max(1, Math.min(50, maxPoints))
+      Math.max(1, Math.min(50, maxPoints)),
     );
 
-    const found = all.find(r => r.routeId === routeId);
-    return res.json({ ok: true, data: { routeId, points: found?.points || [] } });
+    return res.json({ ok: true, data: { routeId, points } });
   } catch (e: any) {
     console.error('/api/v1/routes/:routeId/points error', e?.message || e);
     return res.status(500).json({ ok: false, error: e?.message || 'Failed' });
