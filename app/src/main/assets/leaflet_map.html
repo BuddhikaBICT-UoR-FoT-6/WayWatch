@@ -19,12 +19,265 @@
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
+    // Selected location marker
     let lastMarker = null;
+
+    // User location marker
+    let userMarker = null;
+    let userHeadingLine = null;
+    let lastUserLatLng = null;
+
+    // Traffic markers group
+    const trafficLayer = L.layerGroup().addTo(map);
+
+    // Route / segments layer
+    const routeLayer = L.layerGroup().addTo(map);
+
+    let lastTrafficPoints = [];
+    let lastRouteGeoJson = null;
+    let currentRouteId = null;
+
     function setLocation(lat, lon, label) {
       if (lastMarker) map.removeLayer(lastMarker);
       lastMarker = L.marker([lat, lon]).addTo(map).bindPopup(label || 'Location').openPopup();
       map.setView([lat, lon], 14);
     }
+
+    function severityColor(sev) {
+      const s = Number(sev);
+      if (isNaN(s)) return '#2E7D32';
+      if (s >= 4) return '#C62828';
+      if (s >= 2.5) return '#F9A825';
+      return '#2E7D32';
+    }
+
+    // Draw a simple direction indicator (~30m) based on heading degrees.
+    function headingLineLatLng(lat, lon, headingDeg) {
+      const h = Number(headingDeg);
+      if (isNaN(h)) return null;
+
+      // Convert meters to degrees (very rough, OK for small line)
+      const distM = 30;
+      const rad = h * Math.PI / 180.0;
+      const dLat = (distM * Math.cos(rad)) / 111320.0;
+      const dLon = (distM * Math.sin(rad)) / (111320.0 * Math.cos(lat * Math.PI / 180.0));
+      return [[lat, lon], [lat + dLat, lon + dLon]];
+    }
+
+    function setUserLocation(lat, lon, headingDeg) {
+      lastUserLatLng = [lat, lon];
+      const color = '#1976D2';
+
+      // Use a circle marker for user location (simple + fast)
+      if (userMarker) {
+        userMarker.setLatLng(lastUserLatLng);
+      } else {
+        userMarker = L.circleMarker(lastUserLatLng, {
+          radius: 8,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.9,
+          weight: 2
+        }).addTo(map).bindPopup('You');
+      }
+
+      const line = headingLineLatLng(lat, lon, headingDeg);
+      if (line) {
+        if (userHeadingLine) {
+          userHeadingLine.setLatLngs(line);
+        } else {
+          userHeadingLine = L.polyline(line, { color: color, weight: 3, opacity: 0.9 }).addTo(map);
+        }
+      }
+    }
+
+    function centerOnUser() {
+      if (!lastUserLatLng) return false;
+      map.setView(lastUserLatLng, 15);
+      return true;
+    }
+
+    // --- Simple clustering fallback (no external plugin) ---
+    // Groups points into grid cells (roughly ~100m at zoom 15, scaled by zoom).
+    function gridCluster(points) {
+      const z = map.getZoom() || 14;
+      const scale = Math.max(1, Math.min(6, z - 10));
+      const cell = 0.0015 / scale; // ~150m base
+      const buckets = new Map();
+
+      (points || []).forEach(p => {
+        const lat = Number(p.lat);
+        const lon = Number(p.lon);
+        if (isNaN(lat) || isNaN(lon)) return;
+        const key = `${Math.floor(lat / cell)}_${Math.floor(lon / cell)}`;
+        const b = buckets.get(key) || { lat: 0, lon: 0, count: 0, severitySum: 0 };
+        b.lat += lat;
+        b.lon += lon;
+        b.count += 1;
+        const sev = Number(p.severity);
+        b.severitySum += (isNaN(sev) ? 2.0 : sev);
+        buckets.set(key, b);
+      });
+
+      const clustered = [];
+      buckets.forEach(b => {
+        clustered.push({
+          lat: b.lat / b.count,
+          lon: b.lon / b.count,
+          count: b.count,
+          severity: b.severitySum / b.count
+        });
+      });
+
+      return clustered;
+    }
+
+    function renderTrafficMarkers(points) {
+      trafficLayer.clearLayers();
+      const clustered = gridCluster(points);
+      clustered.forEach(p => {
+        const lat = Number(p.lat);
+        const lon = Number(p.lon);
+        if (isNaN(lat) || isNaN(lon)) return;
+        const sev = Number(p.severity);
+        const color = severityColor(sev);
+
+        const radius = p.count && p.count > 1 ? Math.min(16, 6 + p.count) : 7;
+
+        const marker = L.circleMarker([lat, lon], {
+          radius: radius,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.85,
+          weight: 2
+        });
+
+        const label = p.count > 1
+          ? `Traffic cluster (${p.count}) (sev ${sev.toFixed(1)})`
+          : `Traffic (sev ${sev.toFixed(1)})`;
+        marker.bindPopup(label);
+        marker.addTo(trafficLayer);
+      });
+    }
+
+    function setTrafficPoints(pointsJson) {
+      // pointsJson: JSON string of [{lat,lon,label,severity}]
+      try {
+        const points = JSON.parse(pointsJson) || [];
+        lastTrafficPoints = points;
+        renderTrafficMarkers(points);
+
+        // Re-render route coloring if a route is loaded
+        if (lastRouteGeoJson) {
+          renderRouteSegments(lastRouteGeoJson, lastTrafficPoints);
+        }
+
+        return true;
+      } catch (e) {
+        console.error('setTrafficPoints failed', e);
+        return false;
+      }
+    }
+
+    // --- Route rendering ---
+    function extractLineStringCoords(geo) {
+      if (!geo) return null;
+      if (geo.type === 'FeatureCollection' && Array.isArray(geo.features) && geo.features.length) {
+        return extractLineStringCoords(geo.features[0]);
+      }
+      if (geo.type === 'Feature' && geo.geometry) {
+        return extractLineStringCoords(geo.geometry);
+      }
+      if (geo.type === 'LineString' && Array.isArray(geo.coordinates)) {
+        return geo.coordinates;
+      }
+      return null;
+    }
+
+    function coordToLatLng(coord) {
+      // coord: [lon, lat]
+      return [coord[1], coord[0]];
+    }
+
+    function dist2(aLat, aLon, bLat, bLon) {
+      const dLat = aLat - bLat;
+      const dLon = aLon - bLon;
+      return dLat * dLat + dLon * dLon;
+    }
+
+    function nearestSeverity(lat, lon, points) {
+      let best = null;
+      let bestD = Infinity;
+      (points || []).forEach(p => {
+        const plat = Number(p.lat);
+        const plon = Number(p.lon);
+        if (isNaN(plat) || isNaN(plon)) return;
+        const d = dist2(lat, lon, plat, plon);
+        if (d < bestD) {
+          bestD = d;
+          const sev = Number(p.severity);
+          best = isNaN(sev) ? 2.0 : sev;
+        }
+      });
+      return best;
+    }
+
+    function renderRouteSegments(routeGeoJson, points) {
+      routeLayer.clearLayers();
+
+      const coords = extractLineStringCoords(routeGeoJson);
+      if (!coords || coords.length < 2) return false;
+
+      // Draw as small segments so we can color each by nearest severity.
+      for (let i = 0; i < coords.length - 1; i++) {
+        const a = coordToLatLng(coords[i]);
+        const b = coordToLatLng(coords[i + 1]);
+
+        const midLat = (a[0] + b[0]) / 2.0;
+        const midLon = (a[1] + b[1]) / 2.0;
+        const sev = nearestSeverity(midLat, midLon, points);
+        const color = severityColor(sev);
+
+        L.polyline([a, b], { color: color, weight: 6, opacity: 0.75 }).addTo(routeLayer);
+      }
+
+      // Fit bounds for visibility
+      try {
+        const latLngs = coords.map(coordToLatLng);
+        const bounds = L.latLngBounds(latLngs);
+        map.fitBounds(bounds, { padding: [18, 18] });
+      } catch (_) {}
+
+      return true;
+    }
+
+    async function loadRouteGeoJson(routeId) {
+      try {
+        const url = `file:///android_asset/routes/route_${routeId}.geojson`;
+        const res = await fetch(url);
+        const geo = await res.json();
+        lastRouteGeoJson = geo;
+        renderRouteSegments(geo, lastTrafficPoints);
+        return true;
+      } catch (e) {
+        console.error('loadRouteGeoJson failed', e);
+        lastRouteGeoJson = null;
+        routeLayer.clearLayers();
+        return false;
+      }
+    }
+
+    function setRoute(routeId) {
+      currentRouteId = routeId;
+      return loadRouteGeoJson(routeId);
+    }
+
+    map.on('zoomend', function() {
+      // Recluster markers on zoom changes.
+      if (lastTrafficPoints && lastTrafficPoints.length) {
+        renderTrafficMarkers(lastTrafficPoints);
+      }
+    });
 
     map.on('click', function(e) {
       const lat = e.latlng.lat;
@@ -38,9 +291,21 @@
       }
     });
 
-    // Expose a safe wrapper for WebView.evaluateJavascript
+    // Expose wrappers callable from Android WebView.evaluateJavascript
     window.setLocation = function(lat, lon, label) {
       setLocation(lat, lon, label);
+    }
+    window.setUserLocation = function(lat, lon, headingDeg) {
+      setUserLocation(lat, lon, headingDeg);
+    }
+    window.centerOnUser = function() {
+      return centerOnUser();
+    }
+    window.setTrafficPoints = function(pointsJson) {
+      return setTrafficPoints(pointsJson);
+    }
+    window.setRoute = function(routeId) {
+      return setRoute(routeId);
     }
   </script>
 </body>

@@ -71,6 +71,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Compose-based Map activity -->
+        <activity
+            android:name=".traffic.MapComposeActivity"
+            android:exported="true">
+
+            <!-- Optional dev launcher (disabled by default). If you want the Map to open directly,
+                 move the LAUNCHER filter from MainActivity to here. -->
+        </activity>
+
         <!-- Settings screen -->
         <activity android:name=".ui.SettingsActivity" android:exported="false" />
 
@@ -80,8 +89,6 @@
         <!-- Map activity for TomTom map interactions (legacy) -->
         <activity android:name=".traffic.MapActivity" android:exported="false" />
 
-        <!-- Compose-based Map activity -->
-        <activity android:name=".traffic.MapComposeActivity" android:exported="false" />
 
     </application>
 
