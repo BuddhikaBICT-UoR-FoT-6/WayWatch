@@ -31,11 +31,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.ceylonqueuebuspulse.data.auth.PendingDeepLinkStore
 import com.example.ceylonqueuebuspulse.notifications.NotificationChannels
 import com.example.ceylonqueuebuspulse.settings.SettingsViewModel
 import com.example.ceylonqueuebuspulse.settings.ThemeMode
 import com.example.ceylonqueuebuspulse.ui.SettingsActivity
 import com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity
+import com.example.ceylonqueuebuspulse.traffic.MapComposeActivity
 import com.example.ceylonqueuebuspulse.util.ConnectivityMonitor
 import com.example.ceylonqueuebuspulse.util.NetworkState
 import com.example.ceylonqueuebuspulse.util.ReleasedCallbackRegistry
@@ -76,6 +78,9 @@ class MainActivity : ComponentActivity() {
     private val viewModel: TrafficViewModel by viewModel()
     private val authViewModel: AuthViewModel by viewModel()
     private val settingsViewModel: SettingsViewModel by viewModel()
+
+    // Deep-link stash (used when the user must log in first)
+    private val pendingDeepLinkStore: PendingDeepLinkStore by inject()
 
     // Connectivity monitor for network state
     private val connectivityMonitor: ConnectivityMonitor by inject()
@@ -140,6 +145,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Handle deep link if app launched from a URI.
+        // If user isn't logged in yet, we stash it and apply after login.
         handleDeepLink(intent?.data)
 
         // Compose UI content
@@ -154,6 +160,35 @@ class MainActivity : ComponentActivity() {
             CeylonQueueBusPulseTheme(darkTheme = darkTheme) {
                 val trafficState by viewModel.uiState.collectAsState()
                 val authState by authViewModel.uiState.collectAsState()
+
+                // When auth flips to logged-in, immediately open the map screen.
+                LaunchedEffect(authState.isLoggedIn) {
+                    if (authState.isLoggedIn) {
+                        val pending = pendingDeepLinkStore.consume()
+                        val i = Intent(this@MainActivity, MapComposeActivity::class.java)
+
+                        // If we had a pending deep link, translate it to map extras.
+                        // Supported incoming links:
+                        //   ceylonqueue://route?routeId=138
+                        //   ceylonqueue://report?routeId=138&windowStartMs=...
+                        if (pending != null && pending.scheme == "ceylonqueue") {
+                            when (pending.host) {
+                                "route" -> {
+                                    val rid = pending.getQueryParameter("routeId")?.trim().orEmpty()
+                                    if (rid.isNotEmpty()) i.putExtra(MapComposeActivity.EXTRA_ROUTE_ID, rid)
+                                }
+                                "report" -> {
+                                    val rid = pending.getQueryParameter("routeId")?.trim().orEmpty()
+                                    if (rid.isNotEmpty()) i.putExtra(MapComposeActivity.EXTRA_ROUTE_ID, rid)
+                                }
+                            }
+                        }
+
+                        startActivity(i)
+                        finish()
+                    }
+                }
+
                 val snackbarHostState = remember { SnackbarHostState() }
 
                 // --- UI controls state ---
@@ -536,7 +571,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: android.content.Intent?) {
+    override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         handleDeepLink(intent?.data)
     }
@@ -545,9 +580,16 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return
         if (uri.scheme != "ceylonqueue") return
 
+        // If user isn't logged in, store it and let the login screen show.
+        // Once logged in, we'll launch MapComposeActivity with this link.
+        if (!authViewModel.uiState.value.isLoggedIn) {
+            pendingDeepLinkStore.set(uri)
+            return
+        }
+
+        // Logged-in flow: apply immediately.
         when (uri.host) {
             "route" -> {
-                // Support: ceylonqueue://route?routeId=138
                 val routeId = uri.getQueryParameter("routeId")?.trim().orEmpty()
                 if (routeId.isNotEmpty()) {
                     viewModel.selectRoute(routeId)
@@ -556,7 +598,6 @@ class MainActivity : ComponentActivity() {
             }
 
             "report" -> {
-                // Support: ceylonqueue://report?routeId=138&windowStartMs=...&severityAvg=...&sampleCount=...
                 val routeId = uri.getQueryParameter("routeId")?.trim().orEmpty()
                 val windowStartMs = uri.getQueryParameter("windowStartMs")?.toLongOrNull() ?: -1L
                 val severityAvg = uri.getQueryParameter("severityAvg")?.toDoubleOrNull() ?: Double.NaN
@@ -564,11 +605,11 @@ class MainActivity : ComponentActivity() {
 
                 if (routeId.isNotEmpty() && windowStartMs > 0) {
                     startActivity(
-                        android.content.Intent(this, com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity::class.java).apply {
-                            putExtra(com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity.EXTRA_ROUTE_ID, routeId)
-                            putExtra(com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity.EXTRA_WINDOW_START_MS, windowStartMs)
-                            putExtra(com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity.EXTRA_SEVERITY_AVG, severityAvg)
-                            putExtra(com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity.EXTRA_SAMPLE_COUNT, sampleCount)
+                        Intent(this, TrafficDetailActivity::class.java).apply {
+                            putExtra(TrafficDetailActivity.EXTRA_ROUTE_ID, routeId)
+                            putExtra(TrafficDetailActivity.EXTRA_WINDOW_START_MS, windowStartMs)
+                            putExtra(TrafficDetailActivity.EXTRA_SEVERITY_AVG, severityAvg)
+                            putExtra(TrafficDetailActivity.EXTRA_SAMPLE_COUNT, sampleCount)
                         }
                     )
                 }
