@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material.ExperimentalMaterialApi::class)
+
 // Edited: 2026-01-06
 // Purpose: Main activity hosts Compose UI, binds to TrafficViewModel, schedules background sync, and streams location updates.
 
