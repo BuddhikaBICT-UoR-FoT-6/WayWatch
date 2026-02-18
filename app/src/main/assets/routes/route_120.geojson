@@ -1,0 +1,18 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "routeId": "120", "name": "Demo Route 120" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [79.8612, 6.9271],
+          [79.8550, 6.9200],
+          [79.8450, 6.9100],
+          [79.8350, 6.9000]
+        ]
+      }
+    }
+  ]
+}
