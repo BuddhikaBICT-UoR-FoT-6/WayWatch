@@ -1,0 +1,55 @@
+<resources>
+    <string name="app_name">Ceylon Queue + Bus Pulse</string>
+
+    <string name="title_bus_traffic_updates">බස් ගමනාගමන යාවත්කාලීන</string>
+    <string name="action_logout">පිටවීම</string>
+    <string name="status_offline">අන්තර්ජාලය නොමැත</string>
+    <string name="action_refresh">යාවත්කාලීන කරන්න</string>
+
+    <string name="status_working">ක්‍රියාත්මකයි…</string>
+    <string name="status_syncing">සමමුහුර්ත කරමින්…</string>
+    <string name="label_last_updated">අවසන් යාවත්කාලීන කිරීම: %1$s</string>
+
+    <string name="label_select_route">මාර්ගය තෝරන්න:</string>
+    <string name="label_current_traffic">වත්මන් ගමනාගමනය: මාර්ගය %1$s</string>
+    <string name="label_severity">තදබදය: %1$.1f / 5.0</string>
+    <string name="label_based_on_reports">වාර්තා %1$d මත පදනම්ව</string>
+    <string name="label_updated_minutes_ago">මිනිත්තු %1$d කට පෙර යාවත්කාලීන විය</string>
+
+    <string name="empty_no_aggregates">තවමත් මාර්ගය %1$s සඳහා එක්සත් දත්ත නොමැත</string>
+    <string name="hint_tap_refresh">නවතම දත්ත ලබාගැනීමට Refresh ඔබන්න.</string>
+
+    <string name="label_recent_history">මෑත ඉතිහාසය:</string>
+    <string name="empty_no_history">තවමත් ඉතිහාසයක් නැත.</string>
+
+    <string name="action_submit_sample">නියැදි ගමනාගමන වාර්තාව යවන්න</string>
+
+    <string name="action_retry">නැවත උත්සාහ කරන්න</string>
+    <string name="action_dismiss">අහෝසි කරන්න</string>
+
+    <string name="detail_title">ගමනාගමන විස්තර</string>
+    <string name="detail_route">මාර්ගය: %1$s</string>
+    <string name="detail_window">කාල කවුළුව: %1$s</string>
+    <string name="detail_avg_severity">සාමාන්‍ය තදබදය: %1$.1f / 5.0</string>
+    <string name="detail_samples">නියැදි: %1$d</string>
+
+    <string name="label_filters">පෙරහන්:</string>
+    <string name="sort_newest">නවතම</string>
+    <string name="sort_oldest">පැරණිතම</string>
+    <string name="sort_highest">ඉහළම</string>
+    <string name="label_min_severity">අවම තදබදය: %1$d</string>
+
+    <string name="label_window">කාල කවුළුව: %1$s</string>
+    <string name="label_samples">නියැදි %1$d</string>
+
+    <string name="cd_open_detail">විස්තර විවෘත කරන්න</string>
+    <string name="msg_offline">ඔබට අන්තර්ජාල සම්බන්ධතාවය නැත. සම්බන්ධ වූ පසු දත්ත සමමුහුර්ත වේ.</string>
+
+    <string name="notif_severe_title">තදබද අනතුරු ඇඟවීම</string>
+    <string name="notif_severe_body">මාර්ගය %1$s හි තදබදය ඉහළයි (avg %2$s)</string>
+
+    <string name="location_permission_required">ඔබගේ ස්ථානය පෙන්වීමට ස්ථාන අවසර අවශ්‍යයි.</string>
+    <string name="location_services_off">ස්ථාන සේවා අක්‍රීයයි. සජීවී ස්ථානය සඳහා ඒවා සක්‍රීය කරන්න.</string>
+    <string name="action_enable">සක්‍රීය කරන්න</string>
+    <string name="action_center_on_me">මට මධ්‍යගත කරන්න</string>
+</resources>
