@@ -203,6 +203,44 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Spacer(Modifier.height(4.dp))
 
+                        // Loading state (submit/seed operations)
+                        if (trafficState.isLoading) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Text("Working…", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // Error state (retry)
+                        trafficState.errorMessage?.let { msg ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = msg,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { viewModel.refresh() }) {
+                                            Text("Retry")
+                                        }
+                                        TextButton(onClick = { viewModel.clearError() }) {
+                                            Text("Dismiss")
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+
                         // Show sync/refresh status and last updated timestamp when available
                         if (trafficState.isSyncing) {
                             Text("Syncing…", style = MaterialTheme.typography.bodyMedium)
@@ -225,7 +263,11 @@ class MainActivity : ComponentActivity() {
                             routes.forEach { routeId ->
                                 FilterChip(
                                     selected = trafficState.selectedRouteId == routeId,
-                                    onClick = { viewModel.selectRoute(routeId) },
+                                    onClick = {
+                                        viewModel.selectRoute(routeId)
+                                        // UX: refresh immediately after switching route
+                                        viewModel.refresh()
+                                    },
                                     label = { Text(routeId) }
                                 )
                             }
@@ -281,11 +323,23 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         } else {
-                            Text(
-                                text = "No aggregated data yet for Route ${trafficState.selectedRouteId}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
-                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "No aggregated data yet for Route ${trafficState.selectedRouteId}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "Tap Refresh to fetch the latest aggregates.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -328,6 +382,12 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                        } else {
+                            Text(
+                                text = "No history yet.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
