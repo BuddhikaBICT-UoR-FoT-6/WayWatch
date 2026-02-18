@@ -15,6 +15,11 @@
     <!-- Android 13+ notifications permission (safe to declare; runtime requested by UI/worker) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:targetApi="33" />
 
+    <!-- Declare location hardware feature as not required -->
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+
     <application
         android:name=".CeylonQueueBusPulseApp"
         android:allowBackup="true"

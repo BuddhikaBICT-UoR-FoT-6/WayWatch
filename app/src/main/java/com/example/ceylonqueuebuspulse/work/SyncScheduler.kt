@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 object SyncScheduler {
     private const val UNIQUE_PLANNER_WORK_NAME = "traffic_aggregation_planner_periodic"
     private const val UNIQUE_PLANNER_REFRESH_NAME = "traffic_aggregation_planner_refresh"
+    private const val UNIQUE_SEVERE_ALERT_WORK_NAME = "severe_traffic_alerts_periodic"
 
     /**
      * Schedule periodic background sync and aggregation.
@@ -41,6 +42,22 @@ object SyncScheduler {
                 UNIQUE_PLANNER_WORK_NAME,
                 ExistingPeriodicWorkPolicy.UPDATE,
                 plannerRequest
+            )
+
+        // Severe traffic alerts (watched routes)
+        val alertRequest = PeriodicWorkRequestBuilder<SevereTrafficAlertWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.LINEAR,
+                30, TimeUnit.SECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(context)
+            .enqueueUniquePeriodicWork(
+                UNIQUE_SEVERE_ALERT_WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                alertRequest
             )
     }
 

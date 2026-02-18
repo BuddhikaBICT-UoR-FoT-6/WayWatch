@@ -44,4 +44,12 @@
 
     <string name="cd_open_detail">Open detail</string>
     <string name="msg_offline">You\'re offline. Data will sync when connection is restored.</string>
+
+    <string name="notif_severe_title">Severe traffic alert</string>
+    <string name="notif_severe_body">Route %1$s has severe traffic (avg %2$s)</string>
+
+    <string name="location_permission_required">Location permission is required to show your position.</string>
+    <string name="location_services_off">Location services are turned off. Turn them on for live location.</string>
+    <string name="action_enable">Enable</string>
+    <string name="action_center_on_me">Center on me</string>
 </resources>

@@ -11,6 +11,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,6 +30,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.ceylonqueuebuspulse.notifications.NotificationChannels
+import com.example.ceylonqueuebuspulse.settings.SettingsViewModel
+import com.example.ceylonqueuebuspulse.settings.ThemeMode
+import com.example.ceylonqueuebuspulse.ui.SettingsActivity
 import com.example.ceylonqueuebuspulse.ui.TrafficDetailActivity
 import com.example.ceylonqueuebuspulse.util.ConnectivityMonitor
 import com.example.ceylonqueuebuspulse.util.NetworkState
@@ -69,6 +74,7 @@ class MainActivity : ComponentActivity() {
     // ViewModel scoped to the Activity lifecycle.
     private val viewModel: TrafficViewModel by viewModel()
     private val authViewModel: AuthViewModel by viewModel()
+    private val settingsViewModel: SettingsViewModel by viewModel()
 
     // Connectivity monitor for network state
     private val connectivityMonitor: ConnectivityMonitor by inject()
@@ -90,6 +96,10 @@ class MainActivity : ComponentActivity() {
                 // Avoid calling viewModel.clearError() here to prevent unresolved reference
             }
         }
+
+    // Runtime permission launcher for notifications
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
 
     // Lifecycle: initialize location and compose UI
     @OptIn(ExperimentalMaterial3Api::class)
@@ -116,9 +126,28 @@ class MainActivity : ComponentActivity() {
         // Check/ask permissions and start streaming if allowed
         ensureLocationPermissionAndStart()
 
+        // Notifications
+        NotificationChannels.ensureCreated(applicationContext)
+        if (Build.VERSION.SDK_INT >= 33) {
+            val granted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         // Compose UI content
         setContent {
-            CeylonQueueBusPulseTheme {
+            val settings by settingsViewModel.settings.collectAsState()
+            val darkTheme = when (settings.themeMode) {
+                ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+            }
+
+            CeylonQueueBusPulseTheme(darkTheme = darkTheme) {
                 val trafficState by viewModel.uiState.collectAsState()
                 val authState by authViewModel.uiState.collectAsState()
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -185,6 +214,15 @@ class MainActivity : ComponentActivity() {
                             actions = {
                                 TextButton(onClick = { authViewModel.logout() }) {
                                     Text(stringResource(id = R.string.action_logout), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+
+                                IconButton(onClick = {
+                                    startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Info,
+                                        contentDescription = "Settings"
+                                    )
                                 }
 
                                 // Offline indicator

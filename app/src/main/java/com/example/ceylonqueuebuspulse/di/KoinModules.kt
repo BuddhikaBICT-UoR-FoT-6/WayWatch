@@ -20,6 +20,7 @@ import com.example.ceylonqueuebuspulse.util.ConnectivityMonitor
 import com.example.ceylonqueuebuspulse.util.RetryPolicy
 import com.example.ceylonqueuebuspulse.work.AggregationPlannerWorker
 import com.example.ceylonqueuebuspulse.work.MongoAggregationSyncWorker
+import com.example.ceylonqueuebuspulse.work.SevereTrafficAlertWorker
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.android.ext.koin.androidContext
@@ -111,6 +112,7 @@ val appModule = module {
     // --- WorkManager workers ---
     worker { AggregationPlannerWorker(appContext = get(), params = get()) }
     worker { MongoAggregationSyncWorker(appContext = get(), params = get()) }
+    worker { SevereTrafficAlertWorker(appContext = get(), params = get()) }
 
     // --- Settings (DataStore) ---
     single { SettingsRepository(context = androidContext()) }
