@@ -166,6 +166,7 @@ dependencies {
     }
 
     // Pull-to-refresh for Compose
-    implementation("androidx.compose.material:material-pull-refresh:1.1.0")
+    // PullRefresh APIs are provided by androidx.compose.material:material (aligned via the Compose BOM).
+    implementation("androidx.compose.material:material")
 
 }
