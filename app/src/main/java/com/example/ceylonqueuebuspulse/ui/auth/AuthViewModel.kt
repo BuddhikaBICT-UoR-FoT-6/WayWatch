@@ -3,6 +3,7 @@ package com.example.ceylonqueuebuspulse.ui.auth
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ceylonqueuebuspulse.analytics.FirebaseAnalyticsLogger
 import com.example.ceylonqueuebuspulse.data.auth.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,8 @@ import kotlinx.coroutines.launch
 class AuthViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
+
+    private val analytics = FirebaseAnalyticsLogger()
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState
@@ -72,12 +75,24 @@ class AuthViewModel(
 
             result.fold(
                 onSuccess = {
+                    val mode = if (_uiState.value.isRegisterMode) "register" else "login"
+                    analytics.logEvent("auth_success", mapOf("mode" to mode))
+
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         successMessage = if (_uiState.value.isRegisterMode) "Account created" else "Welcome back"
                     )
                 },
                 onFailure = { t ->
+                    val mode = if (_uiState.value.isRegisterMode) "register" else "login"
+                    analytics.logEvent(
+                        "auth_failure",
+                        mapOf(
+                            "mode" to mode,
+                            "message" to (t.message ?: "Authentication failed")
+                        )
+                    )
+
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = t.message ?: "Authentication failed"
@@ -90,6 +105,7 @@ class AuthViewModel(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
+            analytics.logEvent("logout")
             _uiState.value = _uiState.value.copy(successMessage = "Logged out")
         }
     }

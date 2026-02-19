@@ -52,4 +52,21 @@
     <string name="location_services_off">Location services are turned off. Turn them on for live location.</string>
     <string name="action_enable">Enable</string>
     <string name="action_center_on_me">Center on me</string>
+
+    <string name="title_privacy">Privacy &amp; permissions</string>
+    <string name="action_privacy">Privacy</string>
+
+    <string name="privacy_intro">This app shows bus/traffic conditions and lets users submit reports for specific locations and routes. The sections below explain what data is used and why.</string>
+
+    <string name="privacy_location_title">Location</string>
+    <string name="privacy_location_body">If you enable location, the app uses your device location to center the map and help you pick nearby points. Location is not required to use the app. You can still search or tap the map.</string>
+
+    <string name="privacy_network_title">Network</string>
+    <string name="privacy_network_body">The app connects to the project backend to fetch aggregated traffic data and to submit user reports. Network access is required for live updates.</string>
+
+    <string name="privacy_notifications_title">Notifications</string>
+    <string name="privacy_notifications_body">If enabled, the app can show local alerts for severe traffic on routes you choose to watch. You can disable notifications in system settings at any time.</string>
+
+    <string name="privacy_data_title">Data storage</string>
+    <string name="privacy_data_body">The app stores basic preferences (theme, refresh interval, watched routes) on-device. Traffic aggregates may be cached locally for performance. Authentication tokens are stored securely on-device.</string>
 </resources>

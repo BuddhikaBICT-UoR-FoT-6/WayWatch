@@ -89,6 +89,9 @@
         <!-- Map activity for TomTom map interactions (legacy) -->
         <activity android:name=".traffic.MapActivity" android:exported="false" />
 
+        <!-- Privacy & permissions screen -->
+        <activity android:name=".ui.PrivacyPolicyActivity" android:exported="false" />
+
 
     </application>
 
