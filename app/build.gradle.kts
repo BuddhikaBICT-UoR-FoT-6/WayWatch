@@ -28,9 +28,9 @@ android {
     namespace = "com.example.ceylonqueuebuspulse"
     compileSdk = 35
 
-    // Read API base URL and HTTP sync feature flag from Gradle properties, with defaults
-    // Remove legacy backend configuration; Mongo is the only backend now.
-    val mongoApiBaseUrl: String = providers.gradleProperty("MONGO_API_BASE_URL").orNull ?: "http://10.0.2.2:3000/"
+    // Use 10.0.2.2 for Android emulator -> host.
+    // Default to 3001 to avoid local port conflicts; override via Gradle property MONGO_API_BASE_URL.
+    val mongoApiBaseUrl: String = providers.gradleProperty("MONGO_API_BASE_URL").orNull ?: "http://10.0.2.2:3001/"
 
     defaultConfig {
         applicationId = "com.example.ceylonqueuebuspulse"
@@ -48,6 +48,9 @@ android {
 
         // Pass TomTom SDK key to manifest placeholder (for SDK initialization)
         manifestPlaceholders["TOMTOM_SDK_KEY"] = tomtomApiKey
+
+        // Manifest placeholder used by AndroidManifest.xml (debug can override)
+        manifestPlaceholders["ALLOW_CLEARTEXT"] = "false"
     }
 
     buildTypes {
@@ -56,6 +59,8 @@ android {
             buildConfigField("Boolean", "ALLOW_CLEARTEXT", "true")
             buildConfigField("Boolean", "STRICT_MODE_ENABLED", "true")
             buildConfigField("Boolean", "LOGGING_ENABLED", "true")
+
+            manifestPlaceholders["ALLOW_CLEARTEXT"] = "true"
         }
         release {
             isMinifyEnabled = true
@@ -68,6 +73,8 @@ android {
             buildConfigField("Boolean", "ALLOW_CLEARTEXT", "false")
             buildConfigField("Boolean", "STRICT_MODE_ENABLED", "false")
             buildConfigField("Boolean", "LOGGING_ENABLED", "false")
+
+            manifestPlaceholders["ALLOW_CLEARTEXT"] = "false"
         }
     }
 
