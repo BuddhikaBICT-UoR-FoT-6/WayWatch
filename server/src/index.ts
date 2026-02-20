@@ -522,7 +522,21 @@ export { app };
 // Only start listening when run directly
 if (require.main === module) {
   const PORT = Number(process.env.PORT || 3000);
-  app.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));
+  const HOST = process.env.HOST || '0.0.0.0';
+
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Server listening on http://${HOST}:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Stop the existing process or start with a different PORT.`);
+      console.error('Example: set PORT=3001 then run npm start');
+      process.exit(1);
+    }
+    console.error('Server failed to start:', err);
+    process.exit(1);
+  });
 }
 
 

@@ -13,11 +13,56 @@ import Redis from 'ioredis';
  */
 
  /* Create Redis client (optional). Ensure REDIS_URL is set in production. */
- const redisUrl = process.env.REDIS_URL || null;
- let redisClient: any = null;
+const redisDisabled = String(process.env.REDIS_DISABLED || '').toLowerCase() === 'true';
+const redisUrl = !redisDisabled ? (process.env.REDIS_URL || null) : null;
+let redisClient: any = null;
+let redisFallbackApplied = false;
 
-if(redisUrl){
-    redisClient = new Redis(redisUrl);
+function disableRedisClient(reason: any) {
+    if (redisFallbackApplied) return;
+    redisFallbackApplied = true;
+
+    console.warn('[rateLimiter] Redis unavailable; falling back to in-memory rate limiting.');
+    if (reason) {
+        console.warn('[rateLimiter] Redis reason:', reason?.message || reason);
+    }
+
+    try {
+        // best-effort cleanup to stop reconnect loops / repeated error events
+        if (redisClient && typeof redisClient.disconnect === 'function') {
+            redisClient.disconnect();
+        }
+    } catch {
+        // ignore
+    }
+    redisClient = null;
+}
+
+if (redisDisabled) {
+    console.warn('[rateLimiter] REDIS_DISABLED=true -> using in-memory rate limiter');
+}
+
+if (redisUrl) {
+    console.log('[rateLimiter] Redis enabled');
+    redisClient = new Redis(redisUrl, {
+        // Fail fast if DNS/connection is broken; we'll fall back to memory.
+        connectTimeout: 3000,
+        maxRetriesPerRequest: 1,
+        enableReadyCheck: true,
+        // Don't keep retrying forever on bad DNS.
+        retryStrategy: () => null,
+    });
+
+    redisClient.on('ready', () => {
+        console.log('[rateLimiter] Redis connection ready');
+    });
+
+    // Avoid unhandled ioredis error events (eg. DNS issues)
+    redisClient.on('error', (err: any) => {
+        disableRedisClient(err);
+    });
+} else if (!redisDisabled) {
+    console.warn('[rateLimiter] REDIS_URL not set -> using in-memory rate limiter');
 }
 
 /* Configuration for blocklist behavior (strikes -> block) */
