@@ -25,6 +25,9 @@ Docs/      # Documentation
 
 Base path: `/api/v1`
 
+> Example credentials in previous versions of this README were removed for security.
+> Create your own user via `POST /api/v1/auth/register`.
+
 ### Health
 - `GET /health` → `{ ok: true }`
 
@@ -73,11 +76,13 @@ Create `server/.env` (example keys):
 
 - `MONGODB_URI` – MongoDB connection string
 - `PORT` – default `3000`
+- `HOST` – default `0.0.0.0` (recommended for emulator access)
 - `JWT_SECRET` – access token secret
 - `JWT_EXPIRES_IN` – e.g. `7d`
 - `JWT_REFRESH_SECRET` – refresh token secret (required in production)
 - `JWT_REFRESH_EXPIRES_IN` – e.g. `30d`
 - `REDIS_URL` – optional (Upstash / Redis)
+- `REDIS_DISABLED` – optional (`true` to force in-memory limiter)
 
 Provider integrations:
 - `TOMTOM_API_KEY` – TomTom Web API key
@@ -88,7 +93,7 @@ Provider integrations:
 ### Android (Gradle properties)
 Android reads configuration via **Gradle properties** (so we don’t hardcode secrets in code):
 
-- `MONGO_API_BASE_URL` (default: `http://10.0.2.2:3000/` for emulator)
+- `MONGO_API_BASE_URL` (default: `http://10.0.2.2:3001/` for emulator)
 - `TOMTOM_API_KEY` (used by some client features / manifest placeholder)
 
 Where to set:
@@ -98,7 +103,7 @@ Where to set:
 Example (`local.properties`):
 
 ```
-MONGO_API_BASE_URL=http\://10.0.2.2\:3000/
+MONGO_API_BASE_URL=http\://10.0.2.2\:3001/
 TOMTOM_API_KEY=YOUR_KEY
 ```
 
@@ -120,13 +125,20 @@ npm run build
 npm start
 ```
 
-### Common pitfall: `Missing JWT_SECRET`
-If you see `Missing JWT_SECRET`, it usually means the process didn’t load your `.env`.
+### Run Redis locally (recommended for dev)
 
-Fixes:
-- Ensure `server/.env` exists.
-- Run from the `server/` directory.
-- Confirm your entrypoint loads env early (this repo does `require('dotenv').config()` at the top of `server/src/index.ts`).
+If Upstash DNS/network is restricted, run Redis locally via Docker:
+
+```powershell
+cd server
+npm run dev:redis
+```
+
+Then set:
+
+```dotenv
+REDIS_URL=redis://localhost:6379
+```
 
 ---
 
