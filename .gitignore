@@ -34,3 +34,7 @@ google-services.json
 firebase.json
 .firebaserc
 functions/
+
+# Ignore Gradle properties (often contains local secrets)
+gradle.properties
+**/gradle.properties
