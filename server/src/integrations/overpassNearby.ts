@@ -11,29 +11,34 @@ export type NearbyRoute = {
 };
 
 /**
- * Best-effort: find bus route relations near a point by searching within a bounding box.
+ * Find bus route relations near a point.
  *
- * Note: Overpass has `around:` which works for nodes/ways, but relations are trickier.
- * We use: relations within area + exercise a bbox constraint; results may vary.
+ * Implementation notes:
+ * - Querying ALL bus relations in Sri Lanka is too slow and often 504s.
+ * - Instead, fetch ways around the point, then ask for relations that reference those ways.
+ * - This is best-effort; OSM bus-route coverage varies.
  */
 export async function listNearbyBusRoutes(lat: number, lon: number, radiusKm = 5, limit = 20): Promise<NearbyRoute[]> {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
 
-  const d = Math.max(0.5, Math.min(25, radiusKm));
-  const bbox = bboxFromPoint(lat, lon, d);
+  const radiusM = Math.round(Math.max(300, Math.min(25_000, radiusKm * 1000)));
+  const outLimit = Math.max(1, Math.min(50, limit));
 
   const overpass = `
 [out:json][timeout:25];
 area(${SRI_LANKA_AREA})->.sl;
 (
-  // Relations in Sri Lanka that have member ways inside the bbox (best-effort)
-  relation["type"="route"]["route"="bus"](area.sl);
+  way(around:${radiusM},${lat},${lon})(area.sl)->.w;
+  relation(bw.w)["type"="route"]["route"="bus"](area.sl);
 );
-// constrain by bbox at output time
-out tags ${Math.max(1, Math.min(50, limit))} (${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+out tags ${outLimit};
 `;
 
-  const resp = await axios.post(OVERPASS_URL, overpass, { headers: { 'Content-Type': 'text/plain' }, timeout: 25_000 });
+  const resp = await axios.post(OVERPASS_URL, overpass, {
+    headers: { 'Content-Type': 'text/plain' },
+    timeout: 25_000,
+  });
+
   const json = resp.data as { elements?: Array<{ type: string; id: number; tags?: Record<string, string> }> };
 
   const out: NearbyRoute[] = [];
@@ -56,18 +61,5 @@ out tags ${Math.max(1, Math.min(50, limit))} (${bbox.south},${bbox.west},${bbox.
     return a.ref.localeCompare(b.ref);
   });
 
-  return list.slice(0, Math.max(1, Math.min(50, limit)));
+  return list.slice(0, outLimit);
 }
-
-function bboxFromPoint(lat: number, lon: number, radiusKm: number) {
-  // Very rough conversion: 1 deg lat ~ 111km; lon scales by cos(lat)
-  const dLat = radiusKm / 111.0;
-  const dLon = radiusKm / (111.0 * Math.cos((lat * Math.PI) / 180.0));
-  return {
-    north: lat + dLat,
-    south: lat - dLat,
-    east: lon + dLon,
-    west: lon - dLon,
-  };
-}
-
