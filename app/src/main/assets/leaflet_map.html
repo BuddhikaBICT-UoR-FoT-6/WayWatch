@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -67,6 +67,15 @@
     function setUserLocation(lat, lon, headingDeg) {
       lastUserLatLng = [lat, lon];
       const color = '#1976D2';
+
+      // Notify Android of the latest coordinates (best-effort).
+      try {
+        if (window.AndroidBridge && typeof window.AndroidBridge.onUserLocation === 'function') {
+          window.AndroidBridge.onUserLocation(Number(lat), Number(lon));
+        }
+      } catch (e) {
+        // ignore
+      }
 
       // Use a circle marker for user location (simple + fast)
       if (userMarker) {

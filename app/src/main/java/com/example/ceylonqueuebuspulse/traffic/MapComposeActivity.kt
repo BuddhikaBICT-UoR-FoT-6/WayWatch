@@ -7,29 +7,34 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.ceylonqueuebuspulse.BuildConfig
 import com.example.ceylonqueuebuspulse.MainActivity
 import com.example.ceylonqueuebuspulse.R
 import com.example.ceylonqueuebuspulse.data.auth.PendingDeepLinkStore
@@ -50,6 +55,7 @@ import org.json.JSONObject
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 class MapComposeActivity : ComponentActivity() {
     private val vm: MapComposeViewModel by viewModel()
@@ -180,7 +186,6 @@ fun MapComposeScreen(
     var query by remember { mutableStateOf("") }
     val places by vm.places.collectAsState(initial = emptyList())
     val status by vm.status.collectAsState(initial = null)
-    val provider by locVm.provider.collectAsState(initial = null)
     val routePoints by locVm.routePoints.collectAsState(initial = emptyList())
 
     val context = LocalContext.current
@@ -209,74 +214,32 @@ fun MapComposeScreen(
 
     var selectedRouteId by remember { mutableStateOf(initialRouteId) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = stringResource(id = R.string.app_name))
-            OutlinedButton(onClick = onLogout) { Text(stringResource(id = R.string.action_logout)) }
-        }
+    // Capture user's current location from the WebView updates so the "Center on me" button can fetch traffic.
+    var lastUserLatLon by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
-        Spacer(Modifier.height(8.dp))
+    // Current selected point (from map tap or search select)
+    var selectedPoint by remember { mutableStateOf<PlaceResult?>(null) }
 
-        // Search
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextField(value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f))
-            Button(onClick = { vm.search(query, "") }) { Text("Search") }
-        }
+    // User-report UI
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportSeverity by remember { mutableStateOf(3f) }
 
-        Spacer(Modifier.height(8.dp))
-
-        // Route selector (drives which points are displayed on the map)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("138", "174", "177", "120").forEach { routeId ->
-                OutlinedButton(
-                    onClick = { selectedRouteId = routeId },
-                    enabled = selectedRouteId != routeId
-                ) { Text(routeId) }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Location controls
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = {
-                refreshPermissionState()
-                if (!(fineGranted.value || coarseGranted.value)) {
-                    onRequestLocationPermission()
-                } else {
-                    webViewRef?.let { onStartLocation(it) }
-                }
-            }) {
-                Text(stringResource(id = R.string.action_enable))
-            }
-
-            OutlinedButton(onClick = {
-                webViewRef?.evaluateJavascript("centerOnUser()", null)
-            }) {
-                Text(stringResource(id = R.string.action_center_on_me))
-            }
-        }
-
-        if (!(fineGranted.value || coarseGranted.value)) {
-            Text(
-                text = stringResource(id = R.string.location_permission_required),
-                style = MaterialTheme.typography.bodySmall
-            )
-        } else if (!locationEnabled.value) {
-            Text(
-                text = stringResource(id = R.string.location_services_off),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
-        status?.let { Text(it) }
-
-        // WebView hosting a Leaflet map loaded from assets/leaflet_map.html
+    Box(modifier = Modifier.fillMaxSize()) {
+        // --- MAP (dominant) ---
         AndroidView(
             factory = { ctx ->
                 val wv = WebView(ctx)
                 webViewRef = wv
-                setupWebViewForLeaflet(wv, onMapClick = { lat, lon -> onMapClick(lat, lon) })
+                setupWebViewForLeaflet(
+                    wv,
+                    onMapClick = { lat, lon ->
+                        val p = PlaceResult(label = "Dropped pin", lat = lat, lon = lon)
+                        selectedPoint = p
+                        onMapClick(lat, lon)
+                        showReportDialog = true
+                    },
+                    onUserLocation = { lat, lon -> lastUserLatLon = lat to lon }
+                )
 
                 refreshPermissionState()
                 if (fineGranted.value || coarseGranted.value) {
@@ -284,43 +247,167 @@ fun MapComposeScreen(
                 }
                 wv
             },
-            update = { wv ->
-                // keep reference fresh for LaunchedEffects
-                webViewRef = wv
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(360.dp)
+            update = { wv -> webViewRef = wv },
+            modifier = Modifier.fillMaxSize()
         )
 
-        // Show a simple example of provider data after tap (keeps unified pipeline visible)
-        provider?.let {
+        // --- TOP overlay header ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .padding(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = stringResource(id = R.string.app_name), color = Color.White)
+                OutlinedButton(onClick = onLogout) { Text(stringResource(id = R.string.action_logout)) }
+            }
+
             Spacer(Modifier.height(8.dp))
-            Text(text = "Provider data received for selected point", style = MaterialTheme.typography.bodySmall)
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Search place") }
+                )
+                Button(onClick = { vm.search(query, BuildConfig.TOMTOM_API_KEY) }) { Text("Search") }
+            }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(places) { p ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = p.label)
-                        Spacer(Modifier.height(4.dp))
-                        Text(text = "${p.lat}, ${p.lon}")
+            Spacer(Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("138", "174", "177", "120").forEach { routeId ->
+                    OutlinedButton(
+                        onClick = { selectedRouteId = routeId },
+                        enabled = selectedRouteId != routeId
+                    ) { Text(routeId) }
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                OutlinedButton(onClick = {
+                    refreshPermissionState()
+                    if (!(fineGranted.value || coarseGranted.value)) {
+                        onRequestLocationPermission()
+                        return@OutlinedButton
                     }
-                    Button(onClick = {
-                        webViewRef?.evaluateJavascript("setLocation(${p.lat}, ${p.lon}, ${escapeJsString(p.label)})", null)
-                        onPlaceSelected(p)
-                    }) { Text("Select") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { vm.submitSampleForPlace(p, 3) }) { Text("Submit") }
+
+                    webViewRef?.let { onStartLocation(it) }
+
+                    val coords = lastUserLatLon
+                    if (coords != null) {
+                        webViewRef?.evaluateJavascript("centerOnUser()", null)
+                        val p = PlaceResult(label = "My location", lat = coords.first, lon = coords.second)
+                        selectedPoint = p
+                        locVm.selectLocation(coords.first, coords.second)
+                        showReportDialog = true
+                    } else {
+                        webViewRef?.evaluateJavascript("centerOnUser()", null)
+                    }
+                }) {
+                    Text(stringResource(id = R.string.action_center_on_me))
                 }
             }
+
+            status?.let { Text(it, color = Color.White) }
+            if (!(fineGranted.value || coarseGranted.value)) {
+                Text(text = stringResource(id = R.string.location_permission_required), color = Color.White)
+            } else if (!locationEnabled.value) {
+                Text(text = stringResource(id = R.string.location_services_off), color = Color.White)
+            }
+        }
+
+        // --- Search results panel (only when we have results) ---
+        if (places.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .padding(8.dp)
+                ) {
+                    items(places) { p ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = p.label)
+                                Spacer(Modifier.height(2.dp))
+                                Text(text = "${p.lat}, ${p.lon}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Button(onClick = {
+                                selectedPoint = p
+                                webViewRef?.evaluateJavascript("setLocation(${p.lat}, ${p.lon}, ${escapeJsString(p.label)})", null)
+                                onPlaceSelected(p)
+                                showReportDialog = true
+                            }) { Text("Select") }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Report dialog (Low/Medium/High) ---
+        if (showReportDialog) {
+            val current = selectedPoint
+            AlertDialog(
+                onDismissRequest = { showReportDialog = false },
+                title = { Text("Report traffic") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (current != null) {
+                            Text("Location: ${current.label}")
+                            Text("${current.lat}, ${current.lon}")
+                        }
+
+                        Text("Severity: ${reportSeverity.toInt()} (1=Low, 3=Medium, 5=High)")
+                        Slider(
+                            value = reportSeverity,
+                            onValueChange = { reportSeverity = it },
+                            valueRange = 1f..5f,
+                            steps = 3
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val point = current
+                            if (point != null) {
+                                locVm.submitSample(
+                                    routeId = selectedRouteId,
+                                    severity = reportSeverity.toInt(),
+                                    lat = point.lat,
+                                    lon = point.lon
+                                ) { _, _ ->
+                                    // status already updated in locVm; keep UI simple
+                                }
+                            }
+                            showReportDialog = false
+                        }
+                    ) {
+                        Text("Submit")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showReportDialog = false }) { Text("Cancel") }
+                }
+            )
         }
     }
 
@@ -356,28 +443,57 @@ fun MapComposeScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            onStopLocation()
-        }
+        onDispose { onStopLocation() }
     }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun setupWebViewForLeaflet(wv: WebView, onMapClick: (Double, Double) -> Unit) {
+private fun setupWebViewForLeaflet(
+    wv: WebView,
+    onMapClick: (Double, Double) -> Unit,
+    onUserLocation: (Double, Double) -> Unit
+) {
     val settings: WebSettings = wv.settings
     settings.javaScriptEnabled = true
     settings.domStorageEnabled = true
     settings.loadWithOverviewMode = true
     settings.useWideViewPort = true
 
-    wv.webChromeClient = WebChromeClient()
-    wv.webViewClient = WebViewClient()
+    // Helpful for debugging blank maps caused by blocked CDN assets.
+    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+
+    wv.webChromeClient = object : WebChromeClient() {
+        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+            Log.d(
+                "LeafletWebView",
+                "${consoleMessage.message()} (line ${consoleMessage.lineNumber()} @ ${consoleMessage.sourceId()})"
+            )
+            return super.onConsoleMessage(consoleMessage)
+        }
+    }
+
+    wv.webViewClient = object : WebViewClient() {
+        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+            Log.e("LeafletWebView", "onReceivedError url=${request?.url} error=${error?.description}")
+            super.onReceivedError(view, request, error)
+        }
+
+        override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
+            Log.e("LeafletWebView", "onReceivedHttpError url=${request?.url} status=${errorResponse?.statusCode}")
+            super.onReceivedHttpError(view, request, errorResponse)
+        }
+    }
 
     @Suppress("unused")
     wv.addJavascriptInterface(object {
         @JavascriptInterface
         fun onMapTap(lat: Double, lon: Double) {
             onMapClick(lat, lon)
+        }
+
+        @JavascriptInterface
+        fun onUserLocation(lat: Double, lon: Double) {
+            onUserLocation(lat, lon)
         }
     }, "AndroidBridge")
 

@@ -12,23 +12,25 @@ import com.example.ceylonqueuebuspulse.BuildConfig
 object AppLogger {
 
     fun d(tag: String, message: String) {
-        if (BuildConfig.LOGGING_ENABLED) Log.d(tag, message)
+        if (!BuildConfig.LOGGING_ENABLED) return
+        runCatching { Log.d(tag, message) }
     }
 
     fun i(tag: String, message: String) {
-        if (BuildConfig.LOGGING_ENABLED) Log.i(tag, message)
+        if (!BuildConfig.LOGGING_ENABLED) return
+        runCatching { Log.i(tag, message) }
     }
 
     fun w(tag: String, message: String, tr: Throwable? = null) {
-        if (BuildConfig.LOGGING_ENABLED) {
-            if (tr != null) Log.w(tag, message, tr) else Log.w(tag, message)
-        } else {
+        runCatching {
             if (tr != null) Log.w(tag, message, tr) else Log.w(tag, message)
         }
     }
 
     fun e(tag: String, message: String, tr: Throwable? = null, report: Boolean = true) {
-        if (tr != null) Log.e(tag, message, tr) else Log.e(tag, message)
+        runCatching {
+            if (tr != null) Log.e(tag, message, tr) else Log.e(tag, message)
+        }
         if (report) {
             reportToCrashlytics(tag, message, tr)
         }
