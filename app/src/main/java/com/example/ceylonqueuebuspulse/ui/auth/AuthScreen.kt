@@ -102,11 +102,15 @@ fun AuthScreen(
                         onValueChange = onEmailChange,
                         label = { Text("Email") },
                         supportingText = {
-                            if (state.email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(state.email).matches()) {
+                            val normalizedEmail = state.email.trim().replace("\u00A0", " ").replace(" ", "")
+                            if (normalizedEmail.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
                                 Text("Please enter a valid email")
                             }
                         },
-                        isError = state.email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(state.email).matches(),
+                        isError = run {
+                            val normalizedEmail = state.email.trim().replace("\u00A0", " ").replace(" ", "")
+                            normalizedEmail.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -134,7 +138,8 @@ fun AuthScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    val isEmailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(state.email).matches()
+                    val normalizedEmail = state.email.trim().replace("\u00A0", " ").replace(" ", "")
+                    val isEmailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()
                     val isPasswordValid = if (state.isRegisterMode) state.password.length >= 8 else state.password.isNotEmpty()
 
                     Button(

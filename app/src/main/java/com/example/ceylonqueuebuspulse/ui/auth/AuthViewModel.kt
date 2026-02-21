@@ -43,8 +43,18 @@ class AuthViewModel(
         )
     }
 
+    private fun normalizeEmail(raw: String): String {
+        // Users sometimes paste emails with leading/trailing spaces or accidental internal whitespace.
+        // Patterns.EMAIL_ADDRESS is strict and will reject those.
+        return raw.trim()
+            .replace("\u00A0", " ") // non-breaking spaces
+            .replace(" ", "")
+            .lowercase()
+    }
+
     private fun isEmailValid(email: String): Boolean {
-        return Patterns.EMAIL_ADDRESS.matcher(email).matches()
+        val normalized = normalizeEmail(email)
+        return normalized.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(normalized).matches()
     }
 
     private fun isPasswordValid(password: String, isRegisterMode: Boolean): Boolean {
@@ -52,7 +62,7 @@ class AuthViewModel(
     }
 
     fun submit() {
-        val email = _uiState.value.email.trim()
+        val email = normalizeEmail(_uiState.value.email)
         val password = _uiState.value.password
         val isRegister = _uiState.value.isRegisterMode
         if (!isEmailValid(email)) {

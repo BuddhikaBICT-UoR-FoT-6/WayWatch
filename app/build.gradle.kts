@@ -29,8 +29,8 @@ android {
     compileSdk = 35
 
     // Use 10.0.2.2 for Android emulator -> host.
-    // Default to 3001 to avoid local port conflicts; override via Gradle property MONGO_API_BASE_URL.
-    val mongoApiBaseUrl: String = providers.gradleProperty("MONGO_API_BASE_URL").orNull ?: "http://10.0.2.2:3001/"
+    // Default to 3000 (server default). Override via Gradle property MONGO_API_BASE_URL.
+    val mongoApiBaseUrl: String = providers.gradleProperty("MONGO_API_BASE_URL").orNull ?: "http://10.0.2.2:3000/"
 
     defaultConfig {
         applicationId = "com.example.ceylonqueuebuspulse"
