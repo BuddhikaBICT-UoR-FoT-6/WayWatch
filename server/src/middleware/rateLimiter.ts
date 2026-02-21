@@ -2,19 +2,41 @@ import { Request, Response, NextFunction } from 'express';
 import { RateLimiterRedis, RateLimiterMemory } from 'rate-limiter-flexible';
 import Redis from 'ioredis';
 
-/**
- * Centralized rate limiter factory using Redis when available,
- * fallback to in-memory limiter for dev/tests.
- *
- * Each limiter returns an Express middleware that:
- * - produces 429 responses on exceed
- * - sets `Retry-After` and `X-RateLimit-*` headers when possible
- * - optionally logs blocked events into Redis for admin inspection
- */
+// -----------------------------------------------------------------------------
+// Dev/prod knobs
+// -----------------------------------------------------------------------------
 
- /* Create Redis client (optional). Ensure REDIS_URL is set in production. */
+/**
+ * Disable rate limiting (all endpoints) in dev if needed.
+ *
+ * Supported env var:
+ *   RATE_LIMIT_DISABLED=true
+ */
+const RL_DISABLED = String(process.env.RATE_LIMIT_DISABLED || '').toLowerCase() === 'true';
+
+// -----------------------------------------------------------------------------
+// Redis configuration
+// -----------------------------------------------------------------------------
+
+/* Create Redis client (optional). Ensure REDIS_URL is set in production. */
 const redisDisabled = String(process.env.REDIS_DISABLED || '').toLowerCase() === 'true';
-const redisUrl = !redisDisabled ? (process.env.REDIS_URL || null) : null;
+
+// Allow Upstash-provided env (common in Render) to work out of the box.
+// If a user sets REDIS_URL explicitly, it takes precedence.
+const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
+const upstashRestToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+if (!process.env.REDIS_URL && upstashRestUrl && upstashRestToken) {
+    // Derive host from https://<host> via URL. Prefer TLS and the same token as password.
+    try {
+        const host = new URL(upstashRestUrl).host;
+        // Upstash user is usually "default"; token acts as password.
+        process.env.REDIS_URL = `rediss://default:${upstashRestToken}@${host}:6379`;
+    } catch {
+        // ignore
+    }
+}
+
+const redisUrl = (!redisDisabled && !RL_DISABLED) ? (process.env.REDIS_URL || null) : null;
 let redisClient: any = null;
 let redisFallbackApplied = false;
 
@@ -38,6 +60,10 @@ function disableRedisClient(reason: any) {
     redisClient = null;
 }
 
+if (RL_DISABLED) {
+    console.warn('[rateLimiter] RATE_LIMIT_DISABLED=true -> all rate limiting disabled');
+}
+
 if (redisDisabled) {
     console.warn('[rateLimiter] REDIS_DISABLED=true -> using in-memory rate limiter');
 }
@@ -51,6 +77,7 @@ if (redisUrl) {
         enableReadyCheck: true,
         // Don't keep retrying forever on bad DNS.
         retryStrategy: () => null,
+        tls: redisUrl.startsWith('rediss://') ? {} : undefined,
     });
 
     redisClient.on('ready', () => {
@@ -61,7 +88,7 @@ if (redisUrl) {
     redisClient.on('error', (err: any) => {
         disableRedisClient(err);
     });
-} else if (!redisDisabled) {
+} else if (!redisDisabled && !RL_DISABLED) {
     console.warn('[rateLimiter] REDIS_URL not set -> using in-memory rate limiter');
 }
 
@@ -352,40 +379,55 @@ export async function getRecentRateLimitBlocks(limit = 200) {
   }
 }
 
-/* Pre-built common middlewares for convenience (tunable) */
-export const loginLimiter = combinedIpAndIdentifierMiddleware(
-    { points: 100, duration: '1h' }, // per-IP (total attempts per hour)
-    { points: 5, duration: '1h' },   // per-username/email per hour (strict)
+/**
+ * Per-identifier / per-email limits for auth endpoints.
+ *
+ * These were referenced later in the file but not defined.
+ * Env overrides:
+ *   RL_LOGIN_POINTS, RL_LOGIN_DURATION
+ *   RL_REGISTER_POINTS, RL_REGISTER_DURATION
+ */
+const RL_LOGIN_POINTS = Number(process.env.RL_LOGIN_POINTS || '10');
+const RL_LOGIN_DURATION = String(process.env.RL_LOGIN_DURATION || '15m');
 
-    (req: Request) => {
-        // If user not authenticated, extract username/email from body if present
-        // adjust keys to lower-case so they unify
+const RL_REGISTER_POINTS = Number(process.env.RL_REGISTER_POINTS || '5');
+const RL_REGISTER_DURATION = String(process.env.RL_REGISTER_DURATION || '1h');
+
+/* Pre-built common middlewares for convenience (tunable) */
+export const loginLimiter = RL_DISABLED
+  ? (_req: Request, _res: Response, next: NextFunction) => next()
+  : combinedIpAndIdentifierMiddleware(
+      { points: 100, duration: '1h' }, // per-IP (total attempts per hour)
+      { points: RL_LOGIN_POINTS, duration: RL_LOGIN_DURATION }, // per-identifier
+      (req: Request) => {
         const body = req.body || {};
         const email = (body.email || body.username || body.user || '').toString().toLowerCase();
         return email || null;
-    },
-);
+      },
+    );
 
-export const registerLimiter = combinedIpAndIdentifierMiddleware(
-  { points: 50, duration: '1h' }, // per-IP registrations
-  { points: 3, duration: '24h' }, // per-email or per-phone per day
-  (req: Request) => {
-    const body = req.body || {};
-    return (body.email || body.phone || '').toString().toLowerCase() || null;
-  },
-);
+export const registerLimiter = RL_DISABLED
+  ? (_req: Request, _res: Response, next: NextFunction) => next()
+  : combinedIpAndIdentifierMiddleware(
+      { points: 50, duration: '1h' }, // per-IP registrations
+      { points: RL_REGISTER_POINTS, duration: RL_REGISTER_DURATION }, // per-email/phone
+      (req: Request) => {
+        const body = req.body || {};
+        return (body.email || body.phone || '').toString().toLowerCase() || null;
+      },
+    );
 
 /* Traffic samples: require authenticated user key; strict per-user and looser per-IP */
-export const trafficSamplesLimiter = combinedIpAndIdentifierMiddleware(
-    { points: 200, duration: '1h' }, // per-IP global upper bound
-    { points: 60, duration: '1h' },  // per-user allowed submissions per hour
-    (req: Request) => {
-        // Expect your auth layer to set req.user.id or req.user.sub
-        // Fallback to token or ip if missing
+export const trafficSamplesLimiter = RL_DISABLED
+  ? (_req: Request, _res: Response, next: NextFunction) => next()
+  : combinedIpAndIdentifierMiddleware(
+      { points: 200, duration: '1h' }, // per-IP global upper bound
+      { points: 60, duration: '1h' }, // per-user allowed submissions per hour
+      (req: Request) => {
         const anyUser: any = (req as any).user || {};
         return String(anyUser.id || anyUser.sub || req.ip || 'anon-user') || null;
-    },
-);
+      },
+    );
 
 /* Export redis client for duplicate detection or other middleware if needed */
 export { redisClient };
