@@ -290,6 +290,20 @@ class MainActivity : ComponentActivity() {
                     },
                     snackbarHost = { SnackbarHost(snackbarHostState) }
                 ) { innerPadding ->
+                    // Double-tap to exit logic
+                    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+                    val contextLocal = androidx.compose.ui.platform.LocalContext.current
+                    val msgBackExit = stringResource(id = R.string.msg_back_press_exit)
+
+                    androidx.activity.compose.BackHandler(enabled = true) {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastBackPressTime < 2000) {
+                            (contextLocal as? android.app.Activity)?.finish()
+                        } else {
+                            lastBackPressTime = currentTime
+                            android.widget.Toast.makeText(contextLocal, msgBackExit, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
 
                     Box(
                         modifier = Modifier

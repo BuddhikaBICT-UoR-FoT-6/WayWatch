@@ -76,4 +76,5 @@
     <string name="menu_location_settings">Location Settings</string>
     <string name="menu_dark_mode">Switch to Dark Mode</string>
     <string name="menu_light_mode">Switch to Light Mode</string>
+    <string name="msg_back_press_exit">Press back again to exit</string>
 </resources>
