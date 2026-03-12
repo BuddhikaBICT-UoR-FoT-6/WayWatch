@@ -69,4 +69,11 @@
 
     <string name="privacy_data_title">Data storage</string>
     <string name="privacy_data_body">The app stores basic preferences (theme, refresh interval, watched routes) on-device. Traffic aggregates may be cached locally for performance. Authentication tokens are stored securely on-device.</string>
+
+    <string name="search_placeholder">Search a place…</string>
+    <string name="menu_user_management">Logout</string>
+    <string name="menu_privacy">Privacy Policy</string>
+    <string name="menu_location_settings">Location Settings</string>
+    <string name="menu_dark_mode">Switch to Dark Mode</string>
+    <string name="menu_light_mode">Switch to Light Mode</string>
 </resources>
