@@ -11,5 +11,5 @@ data class AppSettings(
      * WorkManager periodic minimum is 15 minutes; UI may still allow finer granularity for manual refresh.
      */
     val refreshIntervalMinutes: Int = 15,
-    val themeMode: ThemeMode = ThemeMode.SYSTEM
+    val themeMode: ThemeMode = ThemeMode.DARK
 )
