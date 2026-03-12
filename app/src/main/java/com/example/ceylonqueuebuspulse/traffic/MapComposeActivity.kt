@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
@@ -376,31 +378,77 @@ fun MapComposeScreen(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    LaunchedEffect(query) {
-                        if (query.length >= 3) {
-                            kotlinx.coroutines.delay(500)
-                            vm.search(query, com.example.ceylonqueuebuspulse.BuildConfig.TOMTOM_API_KEY)
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LaunchedEffect(query) {
+                            if (query.length >= 3) {
+                                kotlinx.coroutines.delay(500)
+                                vm.search(query, com.example.ceylonqueuebuspulse.BuildConfig.TOMTOM_API_KEY)
+                            }
+                        }
+                        TextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                            )
+                        )
+                        IconButton(onClick = { vm.search(query, com.example.ceylonqueuebuspulse.BuildConfig.TOMTOM_API_KEY) }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+
+                    if (places.isNotEmpty()) {
+                        androidx.compose.material3.HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                         )
-                    )
-                    IconButton(onClick = { vm.search(query, BuildConfig.TOMTOM_API_KEY) }) {
-                        Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp)
+                                .padding(bottom = 8.dp)
+                        ) {
+                            items(places.size) { index ->
+                                val place = places[index]
+                                androidx.compose.material3.ListItem(
+                                    headlineContent = { Text(place.label, style = MaterialTheme.typography.bodyMedium) },
+                                    leadingContent = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                    modifier = Modifier.clickable {
+                                        query = place.label
+                                        vm.selectPlace(place)
+                                        // Clear results manually via ViewModel or locally if possible
+                                        // For now, vm.search("") would clear or we can just assume selectPlace triggers a state change that hides this
+                                        // Actually, let's ensure the VM has a clear method or just call search with empty
+                                        vm.search("", "") 
+                                        
+                                        // Pan map
+                                        mapViewRef?.let { mv ->
+                                            val gp = GeoPoint(place.lat, place.lon)
+                                            mv.controller.animateTo(gp)
+                                            mv.controller.setZoom(15.5)
+                                            
+                                            // Trigger routing logic - same as singleTapConfirmedHelper
+                                            routeVm.loadNearby(place.lat, place.lon)
+                                            selectedPoint = place
+                                            locVm.selectLocation(place.lat, place.lon)
+                                            showReportDialog = true
+                                        }
+                                    },
+                                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                                )
+                            }
+                        }
                     }
                 }
             }
