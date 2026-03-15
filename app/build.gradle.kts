@@ -25,7 +25,7 @@ configurations.matching {
 }
 
 android {
-    namespace = "com.example.ceylonqueuebuspulse"
+    namespace = "com.example.waywatch"
     compileSdk = 35
 
     // Use 10.0.2.2 for Android emulator -> host.
@@ -33,7 +33,7 @@ android {
     val mongoApiBaseUrl: String = providers.gradleProperty("MONGO_API_BASE_URL").orNull ?: "http://10.0.2.2:3000/"
 
     defaultConfig {
-        applicationId = "com.example.ceylonqueuebuspulse"
+        applicationId = "com.example.waywatch"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

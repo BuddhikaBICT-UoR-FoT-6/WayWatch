@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CrowdFlow</string>
+    <string name="app_name">WayWatch</string>
 
     <string name="title_bus_traffic_updates">බස් ගමනාගමන යාවත්කාලීන</string>
     <string name="action_logout">පිටවීම</string>

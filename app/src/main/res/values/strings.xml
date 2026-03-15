@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CrowdFlow</string>
+    <string name="app_name">WayWatch</string>
 
     <string name="title_bus_traffic_updates">Bus Traffic Updates</string>
     <string name="action_logout">Logout</string>
