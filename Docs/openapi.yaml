@@ -1,0 +1,242 @@
+openapi: 3.0.3
+info:
+  title: WayWatch API
+  version: 1.0.0
+  description: Traffic + Transit Pulse backend API
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      summary: Basic health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /healthz:
+    get:
+      summary: Health + uptime
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  uptime:
+                    type: number
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, deviceId]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                deviceId:
+                  type: string
+                deviceName:
+                  type: string
+      responses:
+        '201':
+          description: Registered
+        '409':
+          description: Email already registered
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, deviceId]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                deviceId:
+                  type: string
+      responses:
+        '200':
+          description: Tokens issued
+        '401':
+          description: Invalid credentials
+        '429':
+          description: Account locked
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New tokens
+  /auth/logout:
+    post:
+      summary: Logout (revoke device session)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+  /traffic:
+    get:
+      summary: Traffic at a point
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: lon
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Traffic data
+  /traffic/bbox:
+    post:
+      summary: Traffic in bounding box
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [north, west, south, east]
+              properties:
+                north:
+                  type: number
+                west:
+                  type: number
+                south:
+                  type: number
+                east:
+                  type: number
+                maxPoints:
+                  type: integer
+      responses:
+        '200':
+          description: Traffic points
+  /search:
+    get:
+      summary: TomTom place search
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+  /reverse:
+    get:
+      summary: Reverse geocoding
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: lon
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Address
+  /samples:
+    post:
+      summary: Submit traffic samples
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Sample'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/Sample'
+      responses:
+        '201':
+          description: Inserted
+  /aggregates:
+    get:
+      summary: Fetch aggregated traffic data
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: routeId
+          schema:
+            type: string
+        - in: query
+          name: windowStartMs
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Aggregates
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Sample:
+      type: object
+      required: [routeId, windowStartMs, severity, reportedAtMs]
+      properties:
+        routeId:
+          type: string
+        windowStartMs:
+          type: integer
+        segmentId:
+          type: string
+        severity:
+          type: number
+          minimum: 0
+          maximum: 5
+        reportedAtMs:
+          type: integer
+        lat:
+          type: number
+        lon:
+          type: number

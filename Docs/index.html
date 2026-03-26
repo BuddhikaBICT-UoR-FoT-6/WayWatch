@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WayWatch – Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  header{background:#1e293b;padding:1rem 2rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid #334155}
+  header h1{font-size:1.4rem;font-weight:700;color:#38bdf8}
+  header span{font-size:.85rem;color:#94a3b8}
+  nav{display:flex;gap:.5rem;margin-left:auto}
+  nav a{padding:.4rem .9rem;border-radius:.375rem;background:#0ea5e9;color:#fff;text-decoration:none;font-size:.85rem;font-weight:600}
+  nav a:hover{background:#0284c7}
+  main{max-width:1100px;margin:2rem auto;padding:0 1.5rem}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:2rem}
+  .card{background:#1e293b;border-radius:.75rem;padding:1.25rem 1.5rem;border:1px solid #334155}
+  .card .label{font-size:.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.35rem}
+  .card .value{font-size:2rem;font-weight:700;color:#38bdf8}
+  .card .sub{font-size:.78rem;color:#64748b;margin-top:.2rem}
+  section{background:#1e293b;border-radius:.75rem;border:1px solid #334155;padding:1.5rem;margin-bottom:1.5rem}
+  section h2{font-size:1rem;font-weight:600;color:#cbd5e1;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #334155}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th{text-align:left;padding:.5rem .75rem;color:#94a3b8;font-weight:500;border-bottom:1px solid #334155}
+  td{padding:.5rem .75rem;border-bottom:1px solid #1e293b;color:#cbd5e1}
+  tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:.15rem .55rem;border-radius:9999px;font-size:.72rem;font-weight:600}
+  .badge.green{background:#14532d;color:#4ade80}
+  .badge.yellow{background:#713f12;color:#fbbf24}
+  .badge.red{background:#7f1d1d;color:#f87171}
+  .status-bar{display:flex;align-items:center;gap:.5rem;font-size:.82rem;color:#94a3b8;margin-bottom:1.5rem}
+  .dot{width:8px;height:8px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  footer{text-align:center;padding:2rem;font-size:.78rem;color:#475569}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚌 WayWatch</h1>
+  <span>Traffic + Transit Pulse</span>
+  <nav>
+    <a href="api.html">API Docs</a>
+    <a href="https://github.com/BuddhikaBICT-UoR-FoT-6/WayWatch" target="_blank">GitHub</a>
+  </nav>
+</header>
+<main>
+  <div class="status-bar">
+    <div class="dot"></div>
+    <span>System operational &nbsp;·&nbsp; Last updated: <span id="ts">—</span></span>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Active Routes</div>
+      <div class="value">4</div>
+      <div class="sub">120, 138, 174, 177</div>
+    </div>
+    <div class="card">
+      <div class="label">Severity Scale</div>
+      <div class="value">0–5</div>
+      <div class="sub">Unified across sources</div>
+    </div>
+    <div class="card">
+      <div class="label">Auth</div>
+      <div class="value">JWT</div>
+      <div class="sub">Access + Refresh tokens</div>
+    </div>
+    <div class="card">
+      <div class="label">Data Sources</div>
+      <div class="value">2</div>
+      <div class="sub">TomTom + User reports</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>API Endpoints</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td>/health</td><td>—</td><td>Basic health check</td></tr>
+        <tr><td>GET</td><td>/healthz</td><td>—</td><td>Health + uptime</td></tr>
+        <tr><td>POST</td><td>/api/v1/auth/register</td><td>—</td><td>Register new user</td></tr>
+        <tr><td>POST</td><td>/api/v1/auth/login</td><td>—</td><td>Login (returns tokens)</td></tr>
+        <tr><td>POST</td><td>/api/v1/auth/refresh</td><td>—</td><td>Rotate refresh token</td></tr>
+        <tr><td>POST</td><td>/api/v1/auth/logout</td><td>Bearer</td><td>Revoke device session</td></tr>
+        <tr><td>GET</td><td>/api/v1/traffic</td><td>—</td><td>Traffic at lat/lon</td></tr>
+        <tr><td>POST</td><td>/api/v1/traffic/bbox</td><td>—</td><td>Traffic in bounding box</td></tr>
+        <tr><td>GET</td><td>/api/v1/search</td><td>—</td><td>TomTom place search</td></tr>
+        <tr><td>GET</td><td>/api/v1/reverse</td><td>—</td><td>Reverse geocoding</td></tr>
+        <tr><td>POST</td><td>/api/v1/samples</td><td>Bearer</td><td>Submit traffic samples</td></tr>
+        <tr><td>GET</td><td>/api/v1/aggregates</td><td>Bearer</td><td>Fetch aggregated data</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Hardening Features</h2>
+    <table>
+      <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Zod env validation</td><td><span class="badge green">Active</span></td><td>Fails fast on bad config</td></tr>
+        <tr><td>Helmet + CORS</td><td><span class="badge green">Active</span></td><td>Security headers</td></tr>
+        <tr><td>express-mongo-sanitize</td><td><span class="badge green">Active</span></td><td>NoSQL injection protection</td></tr>
+        <tr><td>Compression</td><td><span class="badge green">Active</span></td><td>gzip responses</td></tr>
+        <tr><td>Account lockout</td><td><span class="badge green">Active</span></td><td>Redis-backed, 5 attempts / 15 min</td></tr>
+        <tr><td>Rate limiting</td><td><span class="badge green">Active</span></td><td>Per-IP + per-user</td></tr>
+        <tr><td>Duplicate detection</td><td><span class="badge green">Active</span></td><td>Redis SHA-256 hash, 5 min TTL</td></tr>
+        <tr><td>HTTPS redirect</td><td><span class="badge yellow">Production</span></td><td>X-Forwarded-Proto check</td></tr>
+        <tr><td>Winston structured logs</td><td><span class="badge green">Active</span></td><td>JSON in prod, simple in dev</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<footer>WayWatch · MIT</footer>
+<script>
+  document.getElementById('ts').textContent = new Date().toLocaleString();
+</script>
+</body>
+</html>
