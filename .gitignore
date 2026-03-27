@@ -29,6 +29,9 @@ server/npm-debug.log*
 server/yarn-debug.log*
 server/yarn-error.log*
 
+# Docs dashboard node_modules
+Docs/dashboard/node_modules/
+
 # Firebase configuration (contains API keys - keep private)
 google-services.json
 firebase.json

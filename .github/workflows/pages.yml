@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'docs/**'
+      - 'Docs/**'
   workflow_dispatch:
 
 permissions:
@@ -27,9 +27,14 @@ jobs:
 
       - uses: actions/configure-pages@v4
 
+      - name: Prepare pages artifact
+        run: |
+          mkdir -p _site
+          cp Docs/index.html Docs/api.html Docs/openapi.yaml _site/
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/
+          path: _site/
 
       - id: deployment
         uses: actions/deploy-pages@v4
