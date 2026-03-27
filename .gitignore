@@ -33,7 +33,7 @@ server/yarn-error.log*
 Docs/dashboard/node_modules/
 
 # Firebase configuration (contains API keys - keep private)
-google-services.json
+# google-services.json  <-- stub committed for CI; real file stays in local.properties
 firebase.json
 .firebaserc
 functions/
