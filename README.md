@@ -1,4 +1,4 @@
-# CrowdFlow
+# WayWatch
 
 An end‑to‑end **traffic + transit pulse** app:
 
@@ -17,6 +17,7 @@ An end‑to‑end **traffic + transit pulse** app:
 app/       # Android application
 server/    # Node/TS backend (Express)
 Docs/      # Documentation
+docs/      # GitHub Pages (dashboard + API reference)
 ```
 
 ---
@@ -30,6 +31,7 @@ Base path: `/api/v1`
 
 ### Health
 - `GET /health` → `{ ok: true }`
+- `GET /healthz` → `{ ok: true, uptime: <seconds> }`
 
 ### Auth
 - `POST /api/v1/auth/register`
@@ -83,6 +85,9 @@ Create `server/.env` (example keys):
 - `JWT_REFRESH_EXPIRES_IN` – e.g. `30d`
 - `REDIS_URL` – optional (Upstash / Redis)
 - `REDIS_DISABLED` – optional (`true` to force in-memory limiter)
+- `LOCKOUT_MAX_ATTEMPTS` – failed login attempts before lockout (default `5`)
+- `LOCKOUT_WINDOW_SECONDS` – sliding window for attempt counting (default `900`)
+- `LOCKOUT_DURATION_SECONDS` – lockout duration (default `1800`)
 
 Provider integrations:
 - `TOMTOM_API_KEY` – TomTom Web API key
@@ -193,7 +198,74 @@ If you’re adjusting navigation, the simplest contract is:
 
 ---
 
-## Route geometry (static GeoJSON assets)
+## Backend hardening
+
+| Feature | Notes |
+|---|---|
+| Zod env validation | `validateConfig()` called before app starts; fatal on bad config |
+| Helmet + CORS | Security headers on every response |
+| express-mongo-sanitize | NoSQL injection protection |
+| Compression | gzip responses |
+| Account lockout | Redis-backed (falls back to in-memory); configurable via `LOCKOUT_*` env vars |
+| Rate limiting | Per-IP + per-user via `rate-limiter-flexible` |
+| Duplicate detection | Redis SHA-256 hash with 5 min TTL |
+| HTTPS redirect | Active in `NODE_ENV=production` via `X-Forwarded-Proto` |
+| Winston structured logs | JSON in production, simple in dev; level via `LOG_LEVEL` |
+
+---
+
+## GitHub Pages dashboard
+
+The `docs/` folder is deployed to GitHub Pages automatically on push to `main`.
+
+- `docs/index.html` — live status dashboard
+- `docs/api.html` — Redoc OpenAPI reference
+- `docs/openapi.yaml` — OpenAPI 3.0 spec
+
+To enable: go to repo **Settings → Pages → Source → Deploy from branch → `main` / `docs/`**.
+
+---
+
+## Testing
+
+### Backend unit tests
+
+```powershell
+cd server
+npm run test:unit
+```
+
+Test files (no DB/Redis required):
+- `src/__tests__/auth.test.ts` — lockout logic, JWT signing
+- `src/__tests__/traffic.test.ts` — speed→severity mapping, Zod validation
+- `src/__tests__/aggregationCron.test.ts` — stats computation, window alignment
+- `src/__tests__/duplicateDetection.test.ts` — middleware happy/duplicate/error paths
+
+### Android unit tests
+
+```powershell
+./gradlew :app:testDebugUnitTest
+```
+
+Test files:
+- `TrafficViewModelTest.kt` — ViewModel state transitions
+- `LocationTrackerTest.kt` — MockLocationTracker emissions
+- `LocationTrackerContractTest.kt` — abstract contract + MockLocationTracker impl
+
+---
+
+## CI
+
+Two workflows in `.github/workflows/`:
+
+| File | Trigger | Jobs |
+|---|---|---|
+| `ci.yml` | PR + push to main | Backend build + unit tests, Android assemble + unit tests |
+| `pages.yml` | Push to main (docs/ changed) | Deploy `docs/` to GitHub Pages |
+
+---
+
+
 
 The Android app can render route lines from:
 

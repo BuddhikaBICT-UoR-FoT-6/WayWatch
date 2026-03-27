@@ -54,5 +54,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CrowdFlow"
+rootProject.name = "WayWatch"
 include(":app")
