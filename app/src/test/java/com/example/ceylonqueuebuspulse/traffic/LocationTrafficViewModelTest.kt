@@ -1,7 +1,7 @@
 package com.example.waywatch.traffic
 
 import com.example.waywatch.data.network.DebugApi
-import com.example.waywatch.data.network.model.ApiResponse
+import com.example.waywatch.data.network.ProviderPointResponse
 import com.example.waywatch.data.repository.AppResult
 import com.example.waywatch.data.repository.TrafficAggregationRepository
 import io.mockk.coEvery
@@ -40,7 +40,7 @@ class LocationTrafficViewModelTest {
     @Test
     fun `selectLocation calls debug provider`() = scope.runTest {
         val debugApi = mockk<DebugApi>()
-        coEvery { debugApi.providerPoint(any(), any()) } returns ApiResponse(ok = true, data = emptyMap())
+        coEvery { debugApi.providerPoint(any(), any()) } returns ProviderPointResponse(ok = true, mapped = emptyMap(), provider = emptyMap())
 
         val repo = mockk<TrafficAggregationRepository>(relaxed = true)
         val vm = LocationTrafficViewModel(debugApi, repo)
@@ -54,8 +54,8 @@ class LocationTrafficViewModelTest {
     @Test
     fun `selectLocation success sets provider and status`() = scope.runTest {
         val debugApi = mockk<DebugApi>()
-        val payload = mapOf("foo" to "bar")
-        coEvery { debugApi.providerPoint(10.0, 20.0) } returns ApiResponse(ok = true, data = payload)
+        val payload = mapOf<String, Any>("foo" to "bar")
+        coEvery { debugApi.providerPoint(10.0, 20.0) } returns ProviderPointResponse(ok = true, mapped = payload, provider = payload)
 
         val repo = mockk<TrafficAggregationRepository>(relaxed = true)
         val vm = LocationTrafficViewModel(debugApi, repo)
@@ -70,7 +70,7 @@ class LocationTrafficViewModelTest {
     @Test
     fun `selectLocation error sets status`() = scope.runTest {
         val debugApi = mockk<DebugApi>()
-        coEvery { debugApi.providerPoint(10.0, 20.0) } returns ApiResponse(ok = false, error = "boom")
+        coEvery { debugApi.providerPoint(10.0, 20.0) } returns ProviderPointResponse(ok = false, mapped = null, provider = null)
 
         val repo = mockk<TrafficAggregationRepository>(relaxed = true)
         val vm = LocationTrafficViewModel(debugApi, repo)
@@ -78,7 +78,8 @@ class LocationTrafficViewModelTest {
         vm.selectLocation(10.0, 20.0)
         advanceUntilIdle()
 
-        assertEquals("Provider lookup returned error: boom", vm.status.value)
+        // ok=false triggers applyMockData which sets mock status
+        assertEquals("Using mock alternative data (API offline)", vm.status.value)
     }
 
     @Test
@@ -92,7 +93,8 @@ class LocationTrafficViewModelTest {
         vm.selectLocation(10.0, 20.0)
         advanceUntilIdle()
 
-        assertEquals("Provider lookup failed: network", vm.status.value)
+        // exception triggers applyMockData
+        assertEquals("Using mock alternative data (API offline)", vm.status.value)
     }
 
     @Test

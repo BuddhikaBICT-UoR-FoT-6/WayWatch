@@ -117,9 +117,9 @@ class MapComposeViewModelTest {
         val api = mockk<TomTomSearchApi>(relaxed = true)
         val locVm = mockk<LocationTrafficViewModel>()
         every {
-            locVm.submitSample(any(), any(), any(), any(), any())
+            locVm.submitSample(any(), any(), any(), any(), any(), any())
         } answers {
-            val cb = arg<(Boolean, String?) -> Unit>(4)
+            val cb = arg<(Boolean, String?) -> Unit>(5)
             cb(true, null)
         }
 
