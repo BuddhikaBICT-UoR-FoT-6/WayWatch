@@ -36,4 +36,4 @@ firebase.json
 functions/
 
 # Ignore Gradle properties (often contains local secrets)
-gradle.properties
+# gradle.properties  <-- tracked so CI gets android.useAndroidX and build flags
