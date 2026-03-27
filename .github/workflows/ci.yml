@@ -49,11 +49,15 @@ jobs:
 
       - name: Write google-services.json
         run: |
-          echo '{
-            "project_info":{"project_number":"000000000000","project_id":"ci-placeholder","storage_bucket":"ci-placeholder.appspot.com"},
-            "client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"com.example.waywatch"}},"oauth_client":[],"api_key":[{"current_key":"ci-placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],
-            "configuration_version":"1"
-          }' > app/google-services.json
+          python3 -c "
+          import json, pathlib
+          data = {
+            'project_info': {'project_number': '000000000000', 'project_id': 'ci-placeholder', 'storage_bucket': 'ci-placeholder.appspot.com'},
+            'client': [{'client_info': {'mobilesdk_app_id': '1:000000000000:android:0000000000000000', 'android_client_info': {'package_name': 'com.example.waywatch'}}, 'oauth_client': [], 'api_key': [{'current_key': 'ci-placeholder'}], 'services': {'appinvite_service': {'other_platform_oauth_client': []}}}],
+            'configuration_version': '1'
+          }
+          pathlib.Path('app/google-services.json').write_text(json.dumps(data))
+          "
 
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug --no-daemon
